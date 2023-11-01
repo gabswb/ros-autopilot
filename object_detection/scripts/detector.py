@@ -1,191 +1,104 @@
 #!/usr/bin/env python
-import cv2 as cv
 import numpy as np
-from skimage import exposure
-# from keras.models import load_model
+import cv2
 import rospy
+from cv_bridge import CvBridge
+
 from sensor_msgs.msg import Image
-from trafficsign import TrafficSign
-
-GLOBAL_LABELS = ['prohibitory',
-                'danger',
-                'mandatory',
-                'other']
-
-SIGN_TYPES_IDS = [
-    'speed-20',
-    'speed-30', 
-    'speed-50', 
-    'speed-60', 
-    'speed-70', 
-    'speed-80', 
-    'end-speed-80', 
-    'speed-100', 
-    'speed-120', 
-    'no-passing', 
-    'no-passing-3ton5', 
-    'punctual-priority', 
-    'road-priority', 
-    'yield', 
-    'stop', 
-    'no-vehicles', 
-    'no-vehicles-3ton5', 
-    'no-entry', 
-    'caution', 
-    'dangerous-curve-left', 
-    'dangerous-curve-right', 
-    'double-curve', 
-    'bumpy-road', 
-    'slippery-road', 
-    'road-narrows-right', 
-    'road-work', 
-    'traffic-signals', 
-    'pedestrians', 
-    'children-crossing', 
-    'bicycles-crossing', 
-    'danger-ice-snow',
-    'wild-animals-crossing', 
-    'end-speed-no-passing', 
-    'right-only', 
-    'left-only', 
-    'ahead-only', 
-    'straight-right-only', 
-    'straight-left-only', 
-    'keep-right', 
-    'keep-left', 
-    'roundabout', 
-    'end-no-passing', 
-    'end-no-passing-3ton5' 
-]
-
-SPECIFIC_LABELS = [
-    'Speed limit (20km/h)',
-    'Speed limit (30km/h)', 
-    'Speed limit (50km/h)', 
-    'Speed limit (60km/h)', 
-    'Speed limit (70km/h)', 
-    'Speed limit (80km/h)', 
-    'End of speed limit (80km/h)', 
-    'Speed limit (100km/h)', 
-    'Speed limit (120km/h)', 
-    'No passing', 
-    'No passing veh over 3.5 tons', 
-    'Right-of-way at intersection', 
-    'Priority road', 
-    'Yield', 
-    'Stop', 
-    'No vehicles', 
-    'Veh > 3.5 tons prohibited', 
-    'No entry', 
-    'General caution', 
-    'Dangerous curve left', 
-    'Dangerous curve right', 
-    'Double curve', 
-    'Bumpy road', 
-    'Slippery road', 
-    'Road narrows on the right', 
-    'Road work', 
-    'Traffic signals', 
-    'Pedestrians', 
-    'Children crossing', 
-    'Bicycles crossing', 
-    'Beware of ice/snow',
-    'Wild animals crossing', 
-    'End speed + passing limits', 
-    'Turn right ahead', 
-    'Turn left ahead', 
-    'Ahead only', 
-    'Go straight or right', 
-    'Go straight or left', 
-    'Keep right', 
-    'Keep left', 
-    'Roundabout mandatory', 
-    'End of no passing', 
-    'End no passing veh > 3.5 tons' 
-]
+from object_detection.msg import ObjectBoundingBox
 
 
 class ObjectDetector(object):
-    def __init__(self):
-        self.yolov4_model = cv.dnn.readNet("src/object_detection/yolo_weight/yolov4-tiny_training_last.weights", "src/object_detection/yolo_weight/yolov4-tiny_training.cfg") # DETECTION MODEL
-        # self.yolov4_model.setPreferableBackend(cv.dnn.DNN_BACKEND_CUDA)
-        # self.yolov4_model.setPreferableTarget(cv.dnn.DNN_TARGET_CUDA)
-        # self.recognition_model = load_model('DeepLeNet-5_CLAHE_AUG(v2).h5') # RECOGNITION MODEL
+    def __init__(self, visualize=False):
+        self.classes = None
+        with open("src/object_detection/yolov4-tiny/classes.names", 'r') as f:
+            self.classes = [line.strip() for line in f.readlines()]
+        self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
-        #get last layers names
-        self.output_layers = self.yolov4_model.getUnconnectedOutLayersNames()
-        self.confidence_threshold = 0.3
-        self.font = cv.FONT_HERSHEY_SIMPLEX
-        self.visualization_publisher = rospy.Publisher("object-detector-viz-topic", Image, queue_size=10)
-        self.image_subscriber = rospy.Subscriber("/forwardCamera/image_raw",Image,tfd.get_traffic_signs)
-        #trial_image = (255 * np.random.random((1028, 700, 3))).astype(np.uint8)
-        #self.get_traffic_signs(trial   _image)
+        # read pre-trained model and config file
+        self.net = cv2.dnn.readNet("src/object_detection/yolov4-tiny/yolov4-tiny.weights", "src/object_detection/yolov4-tiny/yolov4-tiny.cfg")
+        self.output_layers = self.net.getUnconnectedOutLayersNames()
+        self.cvbridge = CvBridge()
 
+        self.font = cv2.FONT_HERSHEY_SIMPLEX
+        self.image_subscriber = rospy.Subscriber("/forwardCamera/image_raw",Image,self.detect)
+        self.object_detection_publisher = rospy.Publisher("/object_bounding_box", ObjectBoundingBox, queue_size=10)
 
-    def get_traffic_signs(self, data):
-        # Detecting objects (YOLO)
+        if visualize:
+            self.visualization_publisher = rospy.Publisher("/object_detector_viz_topic", Image, queue_size=10)
+
+    def draw_bounding_box(self, img, class_id, confidence, x, y, x_plus_w, y_plus_h):
+        label = str(self.classes[class_id])
+        color = self.COLORS[class_id]
+        cv2.rectangle(img, (x,y), (x_plus_w,y_plus_h), color, 2)
+        cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+    def detect(self, data):
+        # create input blob
         img = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
-        blob = cv.dnn.blobFromImage(img, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
-        self.yolov4_model.setInput(blob)
-        outs = self.yolov4_model.forward(self.output_layers)
-
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (416,416), (0,0,0), True, crop=False)
         height, width, _ = img.shape
 
+        # set input blob for the network
+        self.net.setInput(blob)
+        # run inference through the network
+        # and gather predictions from output layers
+        outs = self.net.forward(self.output_layers)
+
+        # initialization
         class_ids = []
         confidences = []
         boxes = []
+        conf_threshold = 0.5
+        nms_threshold = 0.4
+
+        # for each detetion from each output layer 
+        # get the confidence, class id, bounding box params
+        # and ignore weak detections (confidence < 0.3)
         for out in outs:
             for detection in out:
-                rospy.loginfo(detection)
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
-                if confidence > self.confidence_threshold:
-                    # Object detected
+                if confidence > 0.3:
                     center_x = int(detection[0] * width)
                     center_y = int(detection[1] * height)
                     w = int(detection[2] * width)
                     h = int(detection[3] * height)
-                    # Rectangle coordinates
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-                    boxes.append([x, y, w, h])
+                    x = center_x - w // 2
+                    y = center_y - h // 2
+                    class_ids.append(int(class_id))
                     confidences.append(float(confidence))
-                    class_ids.append(class_id)
-        indexes = cv.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-
-        traffic_signs = []
-
-        for i in range(len(boxes)):
-            if i in indexes:
-                x, y, w, h = boxes[i]
-                global_label = str(GLOBAL_LABELS[class_ids[i]]) + "=" + str(round(confidences[i]*100, 2)) + "%"
-                
-                crop_img = img[y:y+h, x:x+w]
-                
-                if len(crop_img) >0:
-                    crop_img = cv.resize(crop_img, (32, 32))
-                    
-                    img_norm = exposure.equalize_adapthist(crop_img, clip_limit=0.1).astype('float32')
-                    
-                    # prediction = self.recognition_model.predict(np.array([img_norm]))
-                    
-                    # selected_type = np.argmax(prediction[0])
-                    # label_specific = SPECIFIC_LABELS[selected_type]
-
-                    # traffic_signs.append(TrafficSign(category=GLOBAL_LABELS[class_ids[i]], type=SIGN_TYPES_IDS[selected_type], label=label_specific,
-                    #                                  x=x, y=y, width=w, height=h, confidence=confidences[i]))
-                    
-                    # img = cv.putText(img, label_specific, (x, y-10), self.font, 0.5, (0,0,255), 2)
-                    
-                img = cv.rectangle(img, (x, y), (x + w, y + h), (0,0,255), 2)
-                img = cv.putText(img, global_label, (x, y+h+15), self.font, 0.5, (0,0,255), 2)
+                    boxes.append([x, y, w, h])
         
-        self.visualization_publisher.publish(Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten())))
-        # return img, traffic_signs
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
+
+        # go through the detections remaining
+        # after nms and draw bounding box
+        rospy.loginfo(f'detection') 
+        
+        for i in range(len(boxes)):
+            for i in indices:
+                x, y, w, h = boxes[i]
+                obb = ObjectBoundingBox()
+                obb.class_id = class_ids[i]
+                obb.x = x
+                obb.y = y
+                obb.w = w
+                self.object_detection_publisher.publish(obb)
+                
+                if self.visualization_publisher:
+                    self.draw_bounding_box(img, class_ids[i], confidences[i], round(x), round(y), round(x+w), round(y+h))
+
+        # display output image   
+        if self.visualization_publisher:
+            self.visualization_publisher.publish(self.cvbridge.cv2_to_imgmsg(img, encoding="passthrough"))
+        
 
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
-    od = ObjectDetector()
-    rospy.loginfo("Subscribed to /forwardCamera/image_raw")
+    # print(f'pwd: {os.getcwd()}')
+    od = ObjectDetector(visualize=True)
     rospy.spin()
+
+
