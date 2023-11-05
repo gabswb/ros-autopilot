@@ -6,8 +6,8 @@ np.float = np.float64 # fix for https://github.com/eric-wieser/ros_numpy/issues/
 import transforms3d.quaternions as quaternions
 
 import rospy
-import ros_numpy
 import tf2_ros
+import ros_numpy
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 
 class DistanceExtractor (object):
@@ -17,6 +17,9 @@ class DistanceExtractor (object):
 		self.image_topic = self.config["node"]["image-topic"]
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
 		self.pointcloud_topic = self.config["node"]["pointcloud-topic"]
+
+		self.pointcloud_subscriber = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.callback_pointcloud)
+
 		
 		# Initialize the transformation listener
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
@@ -24,9 +27,6 @@ class DistanceExtractor (object):
 
 		self.distortion_parameters = None
 		self.sensor2camera = None
-
-
-
 
 
 
@@ -43,8 +43,6 @@ class DistanceExtractor (object):
 	def callback_image(self, data):
 		"""Extract an image from the camera"""
 		self.latest_image = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
-		if self.image_stamp >= self.pointcloud_stamp_array[0]:
-			self.convert_pointcloud()
 			#cProfile.runctx("self.convert_pointcloud()", globals(), locals())
 
 
