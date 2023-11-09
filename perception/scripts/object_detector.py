@@ -5,24 +5,26 @@ import rospy
 from cv_bridge import CvBridge
 
 from sensor_msgs.msg import Image
-from object_detection.msg import ObjectBoundingBox
+#from object_detection.msg import ObjectBoundingBox
+
 
 
 class ObjectDetector(object):
-    def __init__(self, visualize=False):
+    def __init__(self, config, visualize=False):
         self.classes = None
-        with open("src/object_detection/yolov4-tiny/classes.names", 'r') as f:
+        self.config = config
+        with open("src/perception/yolov4-tiny/classes.names", 'r') as f:
             self.classes = [line.strip() for line in f.readlines()]
         self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
         # read pre-trained model and config file
-        self.net = cv2.dnn.readNet("src/object_detection/yolov4-tiny/yolov4-tiny.weights", "src/object_detection/yolov4-tiny/yolov4-tiny.cfg")
+        self.net = cv2.dnn.readNet("src/perception/yolov4-tiny/yolov4-tiny.weights", "src/perception/yolov4-tiny/yolov4-tiny.cfg")
         self.output_layers = self.net.getUnconnectedOutLayersNames()
         self.cvbridge = CvBridge()
 
         self.font = cv2.FONT_HERSHEY_SIMPLEX
         self.image_subscriber = rospy.Subscriber("/forwardCamera/image_raw",Image,self.detect)
-        self.object_detection_publisher = rospy.Publisher("/object_bounding_box", ObjectBoundingBox, queue_size=10)
+        #self.object_detection_publisher = rospy.Publisher("/object_bounding_box", ObjectBoundingBox, queue_size=10)
 
         if visualize:
             self.visualization_publisher = rospy.Publisher("/object_detector_viz_topic", Image, queue_size=10)
@@ -33,9 +35,9 @@ class ObjectDetector(object):
         cv2.rectangle(img, (x,y), (x_plus_w,y_plus_h), color, 2)
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-    def detect(self, data):
+    def detect(self, img):
         # create input blob
-        img = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
+        #img = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
         blob = cv2.dnn.blobFromImage(img, 0.00392, (416,416), (0,0,0), True, crop=False)
         height, width, _ = img.shape
 
@@ -76,24 +78,35 @@ class ObjectDetector(object):
         # go through the detections remaining
         # after nms and draw bounding box
         rospy.loginfo(f'detection') 
+
+        obj_bboxes = []
         
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
-                obb = ObjectBoundingBox()
-                obb.class_id = class_ids[i]
-                obb.x = x
-                obb.y = y
-                obb.w = w
-                self.object_detection_publisher.publish(obb)
+                # obb = ObjectBoundingBox()
+                # obb.class_id = class_ids[i]
+                # obb.x = x
+                # obb.y = y
+                # obb.w = w
+                #self.object_detection_publisher.publish(obb)
+                obb = {}
+                obb["class_id"] = class_ids[i]
+                obb["x"] = x
+                obb["y"] = y
+                obb["w"] = w
+                obj_bboxes.extend(obb)
+
+                rospy.loginfo(f'detected bboxes : {obj_bboxes}')
+
                 
                 if self.visualization_publisher:
                     self.draw_bounding_box(img, class_ids[i], confidences[i], round(x), round(y), round(x+w), round(y+h))
 
         # display output image   
-        if self.visualization_publisher:
-            self.visualization_publisher.publish(self.cvbridge.cv2_to_imgmsg(img, encoding="passthrough"))
-        
+        #if self.visualization_publisher:
+            #self.visualization_publisher.publish(self.cvbridge.cv2_to_imgmsg(img, encoding="passthrough"))
+        return obb
 
 if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True)
