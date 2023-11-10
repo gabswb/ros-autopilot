@@ -152,8 +152,11 @@ class DistanceExtractor (object):
 		self.image_frame = data.header.frame_id
 		self.image_stamp = data.header.stamp
 		self.latest_image = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
-		if self.image_stamp >= self.pointcloud_stamp_array[0]:
-			self.convert_pointcloud()
+		try:
+			if self.image_stamp >= self.pointcloud_stamp_array[0]:
+				self.convert_pointcloud()
+		except:
+			rospy.logerr("callback_image list index out of range")
 
 
 	def callback_pointcloud(self, data):
@@ -252,14 +255,20 @@ class DistanceExtractor (object):
 					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([bbx.w, bbx.h]) / 2)
 					density_model.fit(baselink_points.T)
 					point_density = density_model.score_samples(baselink_points.T)
-					position_estimate = baselink_points[:, np.argmax(point_density)]
+					rospy.loginfo(baselink_points.shape)
+
+					#index = numpy.argsort(point_density)[len(point_density)//2]
+					index = np.argmax(point_density)
+					#position_estimate = baselink_points[:, np.argmax(point_density)]
+					position_estimate = baselink_points[:, index]
 
 					result.x = position_estimate[0]
 					result.y = position_estimate[1]
 					result.z = position_estimate[2]
 				
+					self.object_detector.draw_bounding_box(img, bbx.class_id, 0.5, bbx.x, bbx.y, bbx.x+bbx.w, bbx.y+bbx.h)
 					img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (bbx.x, bbx.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
-				
+					
 				objects_list.append(result)
 			message.object_list = objects_list
 			self.object_info_publisher.publish(message)

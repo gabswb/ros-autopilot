@@ -1,5 +1,5 @@
-uint16 class_id
-uint16 x
-uint16 y
-uint16 w
-uint16 h
+uint32 class_id
+uint32 x
+uint32 y
+uint32 w
+uint32 h

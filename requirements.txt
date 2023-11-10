@@ -1,1 +1,2 @@
 scikit-image>=0.20.0
+Cython>=0.29.32
