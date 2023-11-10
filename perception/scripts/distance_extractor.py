@@ -179,7 +179,7 @@ class DistanceExtractor (object):
 		self.distortion_parameters = data.D
 
 
-	def lidar_to_image(self, pointcloud):
+	def lidar_to_image(self, pointcloud): 
 		return fish2bird.target_to_image(pointcloud, self.lidar_to_camera, self.camera_to_image, self.distortion_parameters[0])
 
 	def convert_pointcloud(self):
@@ -209,7 +209,8 @@ class DistanceExtractor (object):
 		camera_pointcloud = self.lidar_to_camera @ pointcloud
 
 		#Get the object labels and bbox of the image
-		#objects = self.object_detector.detect(img)
+		objects = self.object_detector.detect(img)
+
 
 		# Visualize the lidar data projection onto the image
 		for i, point in enumerate(lidar_coordinates_in_image.T):
@@ -217,55 +218,55 @@ class DistanceExtractor (object):
 				if 0 <= point[0] < img.shape[1] and 0 <= point[1] < img.shape[0] and camera_pointcloud[2, i] >=0:
 					cv.drawMarker(img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
 		filename = f"{int(time.time()*1000)}.png"
-		cv.imwrite(os.path.join("$HOME/Documents", filename), img)
-		filename = f"{int(time.time()*1000)}.png"
+		#file = os.path.join("/home/gabriels/Documents", filename)
+		#cv.imwrite(file, img)
 		
 
-		# # If at least one traffic sign is detected
-		# if len(traffic_signs) > 0:
-		# 	message = TrafficSignStatus()
-		# 	message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
-		# 	self.status_seq += 1
-		# 	sign_messages = []
+		# If at least one traffic sign is detected
+		if len(objects) > 0:
+			message = TrafficSignStatus()
+			message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
+			self.status_seq += 1
+			sign_messages = []
 
-		# 	for sign in traffic_signs:
-		# 		result = TrafficSign()
-		# 		result.category = sign.category
-		# 		result.type = sign.type
-		# 		result.confidence = sign.confidence
+			for sign in traffic_signs:
+				result = TrafficSign()
+				result.category = sign.category
+				result.type = sign.type
+				result.confidence = sign.confidence
 
-		# 		relevant_points_filter = ((sign.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= sign.x + sign.width) &
-		#     					          (sign.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= sign.y + sign.height))
-		# 		relevant_points = pointcloud[:, relevant_points_filter]
+				relevant_points_filter = ((sign.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= sign.x + sign.width) &
+		    					          (sign.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= sign.y + sign.height))
+				relevant_points = pointcloud[:, relevant_points_filter]
 				
-		# 		# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
-		# 		if relevant_points.shape[1] == 0:
-		# 			result.x = np.nan
-		# 			result.y = np.nan
-		# 			result.z = np.nan
-		# 		else:
-		# 			# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
-		# 			baselink_points = self.lidar_to_baselink @ relevant_points
-		# 			density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([sign.width, sign.height]) / 2)
-		# 			density_model.fit(baselink_points.T)
-		# 			point_density = density_model.score_samples(baselink_points.T)
-		# 			position_estimate = baselink_points[:, np.argmax(point_density)]
+				# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
+				if relevant_points.shape[1] == 0:
+					result.x = np.nan
+					result.y = np.nan
+					result.z = np.nan
+				else:
+					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
+					baselink_points = self.lidar_to_baselink @ relevant_points
+					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([sign.width, sign.height]) / 2)
+					density_model.fit(baselink_points.T)
+					point_density = density_model.score_samples(baselink_points.T)
+					position_estimate = baselink_points[:, np.argmax(point_density)]
 
-		# 			result.x = position_estimate[0]
-		# 			result.y = position_estimate[1]
-		# 			result.z = position_estimate[2]
+					result.x = position_estimate[0]
+					result.y = position_estimate[1]
+					result.z = position_estimate[2]
 				
-		# 			img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (sign.x, sign.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+					img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (sign.x, sign.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
 				
-		# 		sign_messages.append(result)
-		# 	message.traffic_signs = sign_messages
-		# 	self.traffic_sign_publisher.publish(message)
+				sign_messages.append(result)
+			message.traffic_signs = sign_messages
+			self.traffic_sign_publisher.publish(message)
 		
-		# #image_message = Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten()))
-		# #self.visualization_publisher.publish(image_message)
-		# img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
-		# cv.imshow('Panneaux', img)
-		# cv.waitKey(5)
+		#image_message = Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten()))
+		#self.visualization_publisher.publish(image_message)
+		img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+		cv.imshow('Panneaux', img)
+		cv.waitKey(5)
 
 
 if __name__ == "__main__":
