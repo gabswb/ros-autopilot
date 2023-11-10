@@ -24,6 +24,14 @@ rm src/perception/scripts/fish2bird.c fish2bird.html
 ```
 
 ### Usage
+Run at the root dir (the one with src/ build/ etc ...)  :
+```sh
+roscore
+simulator # lauch utac simulator
+rosrun transformtrack transformtrack_node
+rosrun perception distance_extractor.py src/config-utac.yml
+```
+
 - **Object detection**:
     - pulish the object bouding box and id of the detcted object with yolo throught the topic `/object_bounding_box` under the `ObjectBoundingBox.msg` message type (to see msg attributes: `rostopic echo /object_bounding_box`)
     - to retrieve the class name with `class_id` use:
