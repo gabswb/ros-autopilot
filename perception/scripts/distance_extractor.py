@@ -15,7 +15,8 @@ from sklearn.neighbors import KernelDensity
 import rospy
 import tf2_ros
 import ros_numpy
-from std_msgs.msg import Header
+#from std_msgs.msg import Header
+from perception.msg import Object, ObjectList, ObjectBoundingBox
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 
 import fish2bird
@@ -34,6 +35,7 @@ class DistanceExtractor (object):
 		self.image_topic = self.config["node"]["image-topic"]
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
 		self.pointcloud_topic = self.config["node"]["pointcloud-topic"]
+		self.object_info_topic = self.config["node"]["object-info-topic"]
 		#self.visualization_topic = self.config["node"]["trafficsigns-viz-topic"]
 
 		# Initialize the topic publisher
@@ -44,7 +46,7 @@ class DistanceExtractor (object):
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
 		# Initialize the traffic sign detector
-		#self.object_detector = ObjectDetector(self.config)
+		self.object_detector = ObjectDetector(self.config)
 
 		# At first everything is null, no image can be produces if one of those is still null
 		self.image_frame = None
@@ -71,6 +73,9 @@ class DistanceExtractor (object):
 		self.image_subscriber = rospy.Subscriber(self.image_topic, Image, self.callback_image, queue_size=1, buff_size=2**28)
 		self.camerainfo_subscriber = rospy.Subscriber(self.camerainfo_topic, CameraInfo, self.callback_camerainfo)
 		self.pointcloud_subscriber = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.callback_pointcloud)
+
+		self.object_info_publisher = rospy.Publisher(self.object_info_topic, ObjectList, queue_size=10)
+
 		#self.visualization_publisher = rospy.Publisher(self.visualization_topic, Image, queue_size=10)
 
 		rospy.loginfo("Everything ready")	
@@ -209,34 +214,31 @@ class DistanceExtractor (object):
 		camera_pointcloud = self.lidar_to_camera @ pointcloud
 
 		#Get the object labels and bbox of the image
-		objects = self.object_detector.detect(img)
+		objects_bbx = self.object_detector.detect(img)
 
-
-		# Visualize the lidar data projection onto the image
-		for i, point in enumerate(lidar_coordinates_in_image.T):
-				# Filter out points that are not in the image dimension or behind the camera
-				if 0 <= point[0] < img.shape[1] and 0 <= point[1] < img.shape[0] and camera_pointcloud[2, i] >=0:
-					cv.drawMarker(img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
-		filename = f"{int(time.time()*1000)}.png"
+		# temp_img = img.copy()
+		# # Visualize the lidar data projection onto the image
+		# for i, point in enumerate(lidar_coordinates_in_image.T):
+		# 		# Filter out points that are not in the image dimension or behind the camera
+		# 		if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
+		# 			cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
+		# filename = f"{int(time.time()*1000)}.png"
 		#file = os.path.join("/home/gabriels/Documents", filename)
-		#cv.imwrite(file, img)
+		#cv.imwrite(file, temp_img)
 		
 
 		# If at least one traffic sign is detected
-		if len(objects) > 0:
-			message = TrafficSignStatus()
-			message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
-			self.status_seq += 1
-			sign_messages = []
+		if len(objects_bbx) > 0:
+			message = ObjectList()
+			#message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
+			#self.status_seq += 1
+			objects_list = []
 
-			for sign in traffic_signs:
-				result = TrafficSign()
-				result.category = sign.category
-				result.type = sign.type
-				result.confidence = sign.confidence
-
-				relevant_points_filter = ((sign.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= sign.x + sign.width) &
-		    					          (sign.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= sign.y + sign.height))
+			for bbx in objects_bbx:
+				result = Object()
+				result.bbox = bbx.to_objectbbox_msg()
+				relevant_points_filter = ((bbx.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= bbx.x + bbx.w) &
+		    					          (bbx.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= bbx.y + bbx.h))
 				relevant_points = pointcloud[:, relevant_points_filter]
 				
 				# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
@@ -247,7 +249,7 @@ class DistanceExtractor (object):
 				else:
 					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
 					baselink_points = self.lidar_to_baselink @ relevant_points
-					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([sign.width, sign.height]) / 2)
+					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([bbx.w, bbx.h]) / 2)
 					density_model.fit(baselink_points.T)
 					point_density = density_model.score_samples(baselink_points.T)
 					position_estimate = baselink_points[:, np.argmax(point_density)]
@@ -256,16 +258,16 @@ class DistanceExtractor (object):
 					result.y = position_estimate[1]
 					result.z = position_estimate[2]
 				
-					img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (sign.x, sign.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+					img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (bbx.x, bbx.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
 				
-				sign_messages.append(result)
-			message.traffic_signs = sign_messages
-			self.traffic_sign_publisher.publish(message)
+				objects_list.append(result)
+			message.object_list = objects_list
+			self.object_info_publisher.publish(message)
 		
 		#image_message = Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten()))
 		#self.visualization_publisher.publish(image_message)
 		img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
-		cv.imshow('Panneaux', img)
+		cv.imshow('dist', img)
 		cv.waitKey(5)
 
 

@@ -12,7 +12,7 @@ node:
   pointcloud-topic: /lidar                                 # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
   trajectory-topic: /navigation/trajectory                 # Trajectory topic                    : circulation        ⟶ [circulation.msg.Trajectory]         ⟶ control 
   direction-topic: /navigation/direction                   # Direction for the next intersection : direction, control ⟶ [Uint8]                              ⟶ circulation
-  traffic-sign-topic: /navigation/traffic_sign             # Traffic signs topic                 : trafficsigns       ⟶ [trafficsigns.msg.TrafficSignStatus] ⟶ circulation, control
+  object-info-topic: /perception/objects-info             # Traffic signs topic                 : trafficsigns       ⟶ [trafficsigns.msg.TrafficSignStatus] ⟶ circulation, control
   speed-topic: /ZOE2UTBM/control/speed                     # Vehicle speed control topic         : control            ⟶ [Float32]
   speed-cap-topic: /ZOE2UTBM/control/max_speed             # Vehicle speed cap topic             : control            ⟶ [Float32]
   steering-angle-topic: /ZOE2UTBM/control/steering_angle   # Vehicle steering topic              : control            ⟶ [Float32]
@@ -30,10 +30,10 @@ node:
   visualize: true                                          # Enable visualizations
   time-discrepancy: false                                  # Correct the timestamp discrepancies in the simulator versions < 27/12/2022 messages
 
-models:
-  detection-model-class-names-path: src/perception/yolov4-tiny/classes.names
-  detection-model-weights-path: src/perception/yolov4-tiny/yolov4-tiny.weights
-  detection-model-config-path: src/perception/yolov4-tiny/yolov4-tiny.cfg
+model:
+  detection-model-class-names-path: src/yolov4-tiny/classes.names
+  detection-model-weights-path: src/yolov4-tiny/yolov4-tiny.weights
+  detection-model-config-path: src/yolov4-tiny/yolov4-tiny.cfg
 
 # Transform service parameters
 transform:

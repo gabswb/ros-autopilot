@@ -10,7 +10,22 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from perception.msg import ObjectBoundingBox
 
+class ObjectBBX(object):
+    def __init__(self, class_id, x, y, w, h):
+        self.class_id = class_id
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
 
+    def to_objectbbox_msg(self):
+        msg = ObjectBoundingBox()
+        msg.class_id = self.class_id
+        msg.x = self.x
+        msg.y = self.y
+        msg.w = self.w
+        msg.h = self.h
+        return msg
 
 class ObjectDetector(object):
     def __init__(self, config, publish=False, visualize=False):
@@ -40,8 +55,10 @@ class ObjectDetector(object):
             self.image_subscriber = rospy.Subscriber(self.image_topic, Image, self.detect)
             self.object_detection_publisher = rospy.Publisher(self.bbox_topic, ObjectBoundingBox, queue_size=10)
 
+        self.visualization_publisher = None
         if visualize:
             self.visualization_publisher = rospy.Publisher(self.object_detection_viz_topic, Image, queue_size=10)
+
 
     def draw_bounding_box(self, img, class_id, confidence, x, y, x_plus_w, y_plus_h):
         label = str(self.classes[class_id])
@@ -98,25 +115,16 @@ class ObjectDetector(object):
         # after nms and draw bounding box
         rospy.loginfo(f'detection') 
 
-        obj_bboxes = []
+        obj_bbox_list = []
         
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
+                obbx = ObjectBBX(class_ids[i], x, y, w, h)
                 if self.publish:
-                    obb = ObjectBoundingBox()
-                    obb.class_id = class_ids[i]
-                    obb.x = x
-                    obb.y = y
-                    obb.w = w
-                    self.object_detection_publisher.publish(obb)
+                    self.object_detection_publisher.publish(obbx.to_objectbbox_msg())
                 else:
-                    obb = {}
-                    obb["class_id"] = class_ids[i]
-                    obb["x"] = x
-                    obb["y"] = y
-                    obb["w"] = w
-                    obj_bboxes.extend(obb)
+                    obj_bbox_list.append(obbx)
                 
                 if self.visualization_publisher:
                     self.draw_bounding_box(img, class_ids[i], confidences[i], round(x), round(y), round(x+w), round(y+h))
@@ -126,7 +134,7 @@ class ObjectDetector(object):
             self.visualization_publisher.publish(self.cvbridge.cv2_to_imgmsg(img, encoding="passthrough"))
         
         if not self.publish:
-            return obb
+            return obj_bbox_list
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
