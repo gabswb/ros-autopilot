@@ -16,14 +16,11 @@ import rospy
 import tf2_ros
 import ros_numpy
 #from std_msgs.msg import Header
-from perception.msg import Object, ObjectList, ObjectBoundingBox
+# from perception.msg import Object, ObjectList
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 
 import fish2bird
 from transformtrack.srv import TransformBatch, TransformBatchRequest
-
-from object_detector import ObjectDetector
-
 
 DISTANCE_SCALE_MIN = 0
 DISTANCE_SCALE_MAX = 160
@@ -31,12 +28,8 @@ DISTANCE_SCALE_MAX = 160
 class DistanceExtractor (object):
 	def __init__(self, config):
 		self.config = config
-
-		self.image_topic = self.config["node"]["image-topic"]
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
 		self.pointcloud_topic = self.config["node"]["pointcloud-topic"]
-		self.object_info_topic = self.config["node"]["object-info-topic"]
-		#self.visualization_topic = self.config["node"]["trafficsigns-viz-topic"]
 
 		# Initialize the topic publisher
 		self.status_seq = 0
@@ -44,9 +37,6 @@ class DistanceExtractor (object):
 		# Initialize the transformation listener
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
-
-		# Initialize the traffic sign detector
-		self.object_detector = ObjectDetector(self.config)
 
 		# At first everything is null, no image can be produces if one of those is still null
 		self.image_frame = None
@@ -70,15 +60,9 @@ class DistanceExtractor (object):
 		self.transform_service_lock = Lock()
 
 		# Initialize the topic subscribers
-		self.image_subscriber = rospy.Subscriber(self.image_topic, Image, self.callback_image, queue_size=1, buff_size=2**28)
 		self.camerainfo_subscriber = rospy.Subscriber(self.camerainfo_topic, CameraInfo, self.callback_camerainfo)
-		self.pointcloud_subscriber = rospy.Subscriber(self.pointcloud_topic, PointCloud2, self.callback_pointcloud)
 
-		self.object_info_publisher = rospy.Publisher(self.object_info_topic, ObjectList, queue_size=10)
-
-		#self.visualization_publisher = rospy.Publisher(self.visualization_topic, Image, queue_size=10)
-
-		rospy.loginfo("Everything ready")	
+		rospy.loginfo("Distance extractor ready")	
 
 	def get_transform(self, source_frame, target_frame):
 		"""Update the lidar-to-camera transform matrix from the tf topic"""
@@ -145,19 +129,21 @@ class DistanceExtractor (object):
 		transforms = np.asarray(response.transforms.data).reshape(response.transforms.layout.dim[0].size, response.transforms.layout.dim[1].size, response.transforms.layout.dim[2].size).transpose(0, 2, 1)
 		distances = np.asarray(response.distances)
 		return transforms, distances
+	
+	def compute_distance(self, img, img_data, pointcloud):
+		self.callback_image(img, img_data)
+		self.callback_pointcloud(pointcloud)
 
-
-	def callback_image(self, data):
+	def callback_image(self, img, img_data):
 		"""Extract an image from the camera"""
-		self.image_frame = data.header.frame_id
-		self.image_stamp = data.header.stamp
-		self.latest_image = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
+		self.image_frame = img_data.header.frame_id
+		self.image_stamp = img_data.header.stamp
+		self.latest_image = img
 		try:
 			if self.image_stamp >= self.pointcloud_stamp_array[0]:
 				self.convert_pointcloud()
 		except:
 			rospy.logerr("callback_image list index out of range")
-
 
 	def callback_pointcloud(self, data):
 		"""Extract a point cloud from the lidar"""
@@ -176,7 +162,6 @@ class DistanceExtractor (object):
 		self.pointcloud_stamp_array.append(self.pointcloud_stamp)
 		self.pointcloud_array.append(self.latest_pointcloud)
 
-
 	def callback_camerainfo(self, data):
 		"""Callback called when a new camera info message is published"""
 		# fish2bird only supports the camera model defined by Christopher Mei
@@ -185,7 +170,7 @@ class DistanceExtractor (object):
 			return
 		self.camera_to_image = np.asarray(data.P).reshape((3, 4))
 		self.distortion_parameters = data.D
-
+		self.camerainfo_subscriber.unregister()
 
 	def lidar_to_image(self, pointcloud): 
 		return fish2bird.target_to_image(pointcloud, self.lidar_to_camera, self.camera_to_image, self.distortion_parameters[0])
@@ -232,13 +217,13 @@ class DistanceExtractor (object):
 
 		# If at least one traffic sign is detected
 		if len(objects_bbx) > 0:
-			message = ObjectList()
+			message = {}
 			#message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
 			#self.status_seq += 1
 			objects_list = []
 
 			for bbx in objects_bbx:
-				result = Object()
+				result = {}
 				result.bbox = bbx.to_objectbbox_msg()
 				relevant_points_filter = ((bbx.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= bbx.x + bbx.w) &
 		    					          (bbx.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= bbx.y + bbx.h))
@@ -273,8 +258,6 @@ class DistanceExtractor (object):
 			message.object_list = objects_list
 			self.object_info_publisher.publish(message)
 		
-		#image_message = Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten()))
-		#self.visualization_publisher.publish(image_message)
 		img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
 		cv.imshow('dist', img)
 		cv.waitKey(5)
