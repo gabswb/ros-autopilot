@@ -16,7 +16,6 @@ import rospy
 import tf2_ros
 import ros_numpy
 #from std_msgs.msg import Header
-# from perception.msg import Object, ObjectList
 from sensor_msgs.msg import Image, PointCloud2, CameraInfo
 
 import fish2bird
@@ -29,7 +28,6 @@ class DistanceExtractor (object):
 	def __init__(self, config):
 		self.config = config
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
-		self.pointcloud_topic = self.config["node"]["pointcloud-topic"]
 
 		# Initialize the topic publisher
 		self.status_seq = 0
@@ -51,13 +49,6 @@ class DistanceExtractor (object):
 		self.camera_to_image = None
 		self.image_stamp = None
 		self.pointcloud_stamp = None
-
-		rospy.loginfo("Waiting for the TransformBatch service...")
-		self.transform_service = None
-		rospy.wait_for_service(self.config["node"]["transform-service-name"])
-		rospy.loginfo("Create TransformBatch service")
-		self.transform_service = rospy.ServiceProxy(self.config["node"]["transform-service-name"], TransformBatch, persistent=True)
-		self.transform_service_lock = Lock()
 
 		# Initialize the topic subscribers
 		self.camerainfo_subscriber = rospy.Subscriber(self.camerainfo_topic, CameraInfo, self.callback_camerainfo)
@@ -85,65 +76,11 @@ class DistanceExtractor (object):
 			np.asarray((0, 0, 0, 1)).reshape((1, 4))
 		), axis=0)
 
-	def get_map_transforms(self, start_times, end_time):
-		"""Get a batch of transforms of the vehicle frame from the given `start_times` to `end_time`
-		   - start_times : list<rospy.Time> : Timestamps to get the transforms from
-		   - end_time    : rospy.Time       : Target timestamp, to get the transforms to
-		<----------------- ndarray[N, 4, 4] : 3D homogeneous transform matrices to transform points in the vehicle frame
-		                                      at `start_times[i]` to the vehicle frame at `end_time`
-		<----------------- list<rospy.Time> : Unbiased start times. This is an artifact from the time when the simulator gave incoherent timestamps,
-		                                      same as `start_times` on the latest versions
-		<----------------- rospy.Time       : Unbiased end time, same as end_time on the latest versions of the simulator
-		"""
-		# Build the request to the transform service, see srv/TransformBatch.srv and msg/TimeBatch.msg for info
-		request = TransformBatchRequest()
-		request.start_times = start_times
-		request.end_time = end_time
-
-		# Now send the request and get the response
-		# We use persistent connections to improve efficiency, and ROS advises to implement some reconnection logic
-		# in case the network gets in the way, so in case of disconnection, retry 10 times to reconnect then fail
-		tries = 0
-		while True:
-			try:
-				# Apparently, when a call to the service is pending, the node is free to service other callbacks,
-				# including callback_trafficsign that also call this service
-				# So with the traffic signs subscriber active, it’s only a matter of time until both get to their transform service call concurrently
-				# For some reason, ROS allows it, and for some reason it deadlocks ROS as a whole
-				# So let’s throw in a lock to prevent ROS from killing itself
-				with self.transform_service_lock:
-					response = self.transform_service(request)
-				break
-			except rospy.ServiceException as exc:
-				if tries > 10:
-					rospy.logerr(f"Connection to service {self.config['node']['transform-service-name']} failed {tries} times, skipping")
-					rospy.logerr(f"Failed with error : {exc}")
-					raise RuntimeError("Unable to connect to the transform service")
-				rospy.logerr(f"Connection to service {self.config['node']['transform-service-name']} lost, reconnecting...")
-				self.transform_service.close()
-				self.transform_service = rospy.ServiceProxy(self.config["node"]["transform-service-name"], TransformBatch, persistent=True)
-				tries += 1
-		
-		# The call was successful, get the transforms in the right format and return
-		# The transpose is because the individual matrices are transmitted in column-major order
-		transforms = np.asarray(response.transforms.data).reshape(response.transforms.layout.dim[0].size, response.transforms.layout.dim[1].size, response.transforms.layout.dim[2].size).transpose(0, 2, 1)
-		distances = np.asarray(response.distances)
-		return transforms, distances
-	
-	def compute_distance(self, img, img_data, pointcloud):
-		self.callback_image(img, img_data)
-		self.callback_pointcloud(pointcloud)
-
 	def callback_image(self, img, img_data):
 		"""Extract an image from the camera"""
 		self.image_frame = img_data.header.frame_id
 		self.image_stamp = img_data.header.stamp
 		self.latest_image = img
-		try:
-			if self.image_stamp >= self.pointcloud_stamp_array[0]:
-				self.convert_pointcloud()
-		except:
-			rospy.logerr("callback_image list index out of range")
 
 	def callback_pointcloud(self, data):
 		"""Extract a point cloud from the lidar"""
@@ -175,92 +112,46 @@ class DistanceExtractor (object):
 	def lidar_to_image(self, pointcloud): 
 		return fish2bird.target_to_image(pointcloud, self.lidar_to_camera, self.camera_to_image, self.distortion_parameters[0])
 
-	def convert_pointcloud(self):
+	def get_object_positions(self, img, img_data, point_cloud_data, obj_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera and publish the distance to the traffic sign bounding box on the topic"""
-		# If some info is missing, can’t output an image
-		if (self.image_frame is None or self.pointcloud_frame is None or
-			self.latest_image is None or self.latest_pointcloud is None or
-			self.camera_to_image is None):  # or self.traffic_sign_detector is None):
-			return
+		if (self.camera_to_image is None):
+			raise Exception("Camera info not received yet")
+
+		self.callback_image(img, img_data)
+		self.callback_pointcloud(point_cloud_data)
 
 		self.lidar_to_camera = self.get_transform(self.pointcloud_frame, self.image_frame)
 		self.lidar_to_baselink = self.get_transform(self.pointcloud_frame, self.config["node"]["road-frame"])
-
 		pointcloud = np.ascontiguousarray(self.pointcloud_array[0])
-		pointcloud_stamp = self.pointcloud_stamp_array[0]
-		img = self.latest_image
-		img_stamp = self.image_stamp
-
-		transforms, distances = self.get_map_transforms([pointcloud_stamp], img_stamp)
-		pointcloud = transforms[0] @ pointcloud
-
 		self.pointcloud_array = []
 		self.pointcloud_stamp_array = []
 
 		lidar_coordinates_in_image = self.lidar_to_image(pointcloud)
 
-		camera_pointcloud = self.lidar_to_camera @ pointcloud
+		for i, obj in enumerate(obj_list):
+			relevant_points_filter = ((obj.bbox.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= obj.bbox.x + obj.bbox.w) &
+										(obj.bbox.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= obj.bbox.y + obj.bbox.h))
+			relevant_points = pointcloud[:, relevant_points_filter]
+			
+			# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
+			if relevant_points.shape[1] == 0:
+				obj_list[i].x = np.nan
+				obj_list[i].y = np.nan
+				obj_list[i].z = np.nan
+			else:
+				# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
+				baselink_points = self.lidar_to_baselink @ relevant_points
+				density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([obj.bbox.w, obj.bbox.h]) / 2)
+				density_model.fit(baselink_points.T)
+				point_density = density_model.score_samples(baselink_points.T)
 
-		#Get the object labels and bbox of the image
-		objects_bbx = self.object_detector.detect(img)
+				index = np.argmax(point_density)
+				position_estimate = baselink_points[:, index]
+				obj_list[i].x = position_estimate[0]
+				obj_list[i].y = position_estimate[1]
+				obj_list[i].z = position_estimate[2]
 
-		# temp_img = img.copy()
-		# # Visualize the lidar data projection onto the image
-		# for i, point in enumerate(lidar_coordinates_in_image.T):
-		# 		# Filter out points that are not in the image dimension or behind the camera
-		# 		if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
-		# 			cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
-		# filename = f"{int(time.time()*1000)}.png"
-		#file = os.path.join("/home/gabriels/Documents", filename)
-		#cv.imwrite(file, temp_img)
-		
-
-		# If at least one traffic sign is detected
-		if len(objects_bbx) > 0:
-			message = {}
-			#message.header = Header(seq=self.status_seq, stamp=img_stamp, frame_id=self.parameters["node"]["road-frame"])
-			#self.status_seq += 1
-			objects_list = []
-
-			for bbx in objects_bbx:
-				result = {}
-				result.bbox = bbx.to_objectbbox_msg()
-				relevant_points_filter = ((bbx.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= bbx.x + bbx.w) &
-		    					          (bbx.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= bbx.y + bbx.h))
-				relevant_points = pointcloud[:, relevant_points_filter]
-				
-				# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
-				if relevant_points.shape[1] == 0:
-					result.x = np.nan
-					result.y = np.nan
-					result.z = np.nan
-				else:
-					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
-					baselink_points = self.lidar_to_baselink @ relevant_points
-					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([bbx.w, bbx.h]) / 2)
-					density_model.fit(baselink_points.T)
-					point_density = density_model.score_samples(baselink_points.T)
-					rospy.loginfo(baselink_points.shape)
-
-					#index = numpy.argsort(point_density)[len(point_density)//2]
-					index = np.argmax(point_density)
-					#position_estimate = baselink_points[:, np.argmax(point_density)]
-					position_estimate = baselink_points[:, index]
-
-					result.x = position_estimate[0]
-					result.y = position_estimate[1]
-					result.z = position_estimate[2]
-				
-					self.object_detector.draw_bounding_box(img, bbx.class_id, 0.5, bbx.x, bbx.y, bbx.x+bbx.w, bbx.y+bbx.h)
-					img = cv.putText(img, f'd = {np.linalg.norm(position_estimate)} m', (bbx.x, bbx.y-25), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
-					
-				objects_list.append(result)
-			message.object_list = objects_list
-			self.object_info_publisher.publish(message)
-		
-		img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
-		cv.imshow('dist', img)
-		cv.waitKey(5)
+		return obj_list
 
 
 if __name__ == "__main__":

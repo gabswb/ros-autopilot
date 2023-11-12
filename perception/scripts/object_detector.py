@@ -6,24 +6,7 @@ import cv2
 import rospy
 import yaml
 
-# from perception.msg import ObjectBoundingBox
-
-class ObjectBBX(object):
-    def __init__(self, class_id, x, y, w, h):
-        self.class_id = class_id
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-
-    # def to_objectbbox_msg(self):
-    #     msg = ObjectBoundingBox()
-    #     msg.class_id = self.class_id
-    #     msg.x = self.x
-    #     msg.y = self.y
-    #     msg.w = self.w
-    #     msg.h = self.h
-    #     return msg
+from Obj import Obj
 
 class ObjectDetector(object):
     def __init__(self, config, publish=False):
@@ -77,14 +60,14 @@ class ObjectDetector(object):
         # go through the detections remaining after nms and draw bounding box
         rospy.loginfo(f'detection') 
 
-        obj_bbox_list = []
+        obj_list = []
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
-                obbx = ObjectBBX(class_ids[i], x, y, w, h)
-                obj_bbox_list.append(obbx)
+                obbx = Obj(class_ids[i], x, y, w, h)
+                obj_list.append(obbx)
                 
-        return obj_bbox_list
+        return obj_list
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
