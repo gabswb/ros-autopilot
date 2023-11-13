@@ -15,17 +15,17 @@ THRESHOLD_DISTANCE = 10 # meters
 RATE = 10 # Hz
 
 class Controller(object):
-    def __init__(self, parameters):
-        self.parameters = parameters
+    def __init__(self, config):
+        self.config = config
 
         # Topics
-        self.velocity_topic = self.parameters["node"]["velocity-topic"]
-        self.trajectory_topic = self.parameters["node"]["trajectory-topic"]
-        self.speed_topic = self.parameters["node"]["speed-topic"]
-        self.speed_cap_topic = self.parameters["node"]["speed-cap-topic"]
-        self.steering_angle_topic = self.parameters["node"]["steering-angle-topic"]
-        self.object_info_topic = self.parameters["node"]["object-info-topic"]
-        self.direction_topic = self.parameters["node"]["direction-topic"]
+        self.velocity_topic = self.config["node"]["velocity-topic"]
+        self.trajectory_topic = self.config["node"]["trajectory-topic"]
+        self.speed_topic = self.config["node"]["speed-topic"]
+        self.speed_cap_topic = self.config["node"]["speed-cap-topic"]
+        self.steering_angle_topic = self.config["node"]["steering-angle-topic"]
+        self.object_info_topic = self.config["node"]["object-info-topic"]
+        self.direction_topic = self.config["node"]["direction-topic"]
 
         # Situation states
         self.real_speed = None
@@ -79,10 +79,10 @@ if __name__ == "__main__":
         print(f"Usage : {sys.argv[0]} <parameter-file>")
     else:
         with open(sys.argv[1], "r") as parameterfile:
-            parameters = yaml.load(parameterfile, yaml.Loader)
+            config = yaml.load(parameterfile, yaml.Loader)
 
         rospy.init_node("decision")
-        node = Controller(parameters)
+        node = Controller(config)
         while not rospy.is_shutdown():
             rate = rospy.Rate(RATE)
             node.publish_control_inputs()

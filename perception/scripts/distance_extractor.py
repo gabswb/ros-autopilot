@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-import os
-import time
-from threading import Lock
-
 import yaml
-import cv2 as cv
 import numpy as np
 np.float = np.float64 # fix for https://github.com/eric-wieser/ros_numpy/issues/37
 import transforms3d.quaternions as quaternions
@@ -15,11 +10,9 @@ from sklearn.neighbors import KernelDensity
 import rospy
 import tf2_ros
 import ros_numpy
-#from std_msgs.msg import Header
-from sensor_msgs.msg import Image, PointCloud2, CameraInfo
-
 import fish2bird
-from transformtrack.srv import TransformBatch, TransformBatchRequest
+
+from sensor_msgs.msg import CameraInfo
 
 DISTANCE_SCALE_MIN = 0
 DISTANCE_SCALE_MAX = 160
