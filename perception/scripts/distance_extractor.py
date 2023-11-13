@@ -221,15 +221,15 @@ class DistanceExtractor (object):
 		#Get the object labels and bbox of the image
 		objects_bbx = self.object_detector.detect(img)
 
-		temp_img = img.copy()
-		# Visualize the lidar data projection onto the image
-		for i, point in enumerate(lidar_coordinates_in_image.T):
-				# Filter out points that are not in the image dimension or behind the camera
-				if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
-					cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
-		# filename = f"{int(time.time()*1000)}.png"
-		# file = os.path.join("/home/gabriels/Documents", filename)
-		# cv.imwrite(file, temp_img)
+		# temp_img = img.copy()
+		# # Visualize the lidar data projection onto the image
+		# for i, point in enumerate(lidar_coordinates_in_image.T):
+		# 		# Filter out points that are not in the image dimension or behind the camera
+		# 		if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
+		# 			cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
+		# # filename = f"{int(time.time()*1000)}.png"
+		# # file = os.path.join("/home/gabriels/Documents", filename)
+		# # cv.imwrite(file, temp_img)
 		# cv.imshow('dist', temp_img)
 		# cv.waitKey(5)
 		
@@ -247,6 +247,20 @@ class DistanceExtractor (object):
 				relevant_points_filter = ((bbx.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= bbx.x + bbx.w) &
 		    					          (bbx.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= bbx.y + bbx.h))
 				relevant_points = pointcloud[:, relevant_points_filter]
+
+				r = self.lidar_to_image(relevant_points)
+				temp_img = r.copy()
+				# Visualize the lidar data projection onto the image
+				for i, point in enumerate(lidar_coordinates_in_image.T):
+						# Filter out points that are not in the image dimension or behind the camera
+						if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
+							cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
+				# filename = f"{int(time.time()*1000)}.png"
+				# file = os.path.join("/home/gabriels/Documents", filename)
+				# cv.imwrite(file, temp_img)
+				cv.imshow('dist', temp_img)
+				cv.waitKey(5)
+
 				
 				# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
 				if relevant_points.shape[1] == 0:
@@ -256,16 +270,18 @@ class DistanceExtractor (object):
 				else:
 					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the object
 					baselink_points = self.lidar_to_baselink @ relevant_points
+					
+
 					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([bbx.w, bbx.h]) / 2)
 					density_model.fit(baselink_points.T)
 					point_density = density_model.score_samples(baselink_points.T)
 					rospy.loginfo(baselink_points.shape)
 
-					#index = np.argsort(point_density)[len(point_density)//2]
+					index = np.argsort(point_density)[len(point_density)//2]
 					index = np.argmax(point_density)
-					#index = np.argmin(point_density)
+					index = np.argmin(point_density)
 
-					#position_estimate = baselink_points[:, np.argmax(point_density)]
+					position_estimate = baselink_points[:, np.argmax(point_density)]
 					position_estimate = baselink_points[:, index]
 
 					result.x = position_estimate[0]
@@ -281,9 +297,9 @@ class DistanceExtractor (object):
 		
 		#image_message = Image(height=img.shape[0], width=img.shape[1], data=tuple(img.flatten()))
 		#self.visualization_publisher.publish(image_message)
-		img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
-		cv.imshow('dist', img)
-		cv.waitKey(5)
+		# img = cv.cvtColor(img, cv.COLOR_RGB2BGR)
+		# cv.imshow('dist', img)
+		# cv.waitKey(5)
 
 
 if __name__ == "__main__":
