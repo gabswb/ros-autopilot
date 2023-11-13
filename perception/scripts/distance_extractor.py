@@ -219,15 +219,17 @@ class DistanceExtractor (object):
 		#Get the object labels and bbox of the image
 		objects_bbx = self.object_detector.detect(img)
 
-		# temp_img = img.copy()
-		# # Visualize the lidar data projection onto the image
-		# for i, point in enumerate(lidar_coordinates_in_image.T):
-		# 		# Filter out points that are not in the image dimension or behind the camera
-		# 		if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
-		# 			cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
+		temp_img = img.copy()
+		# Visualize the lidar data projection onto the image
+		for i, point in enumerate(lidar_coordinates_in_image.T):
+				# Filter out points that are not in the image dimension or behind the camera
+				if 0 <= point[0] < temp_img.shape[1] and 0 <= point[1] < temp_img.shape[0] and camera_pointcloud[2, i] >=0:
+					cv.drawMarker(temp_img, (int(point[0]), int(point[1])), (0, 255, 0), cv.MARKER_CROSS, 4)
 		# filename = f"{int(time.time()*1000)}.png"
-		#file = os.path.join("/home/gabriels/Documents", filename)
-		#cv.imwrite(file, temp_img)
+		# file = os.path.join("/home/gabriels/Documents", filename)
+		# cv.imwrite(file, temp_img)
+		cv.imshow('dist', temp_img)
+		cv.waitKey(5)
 		
 
 		# If at least one traffic sign is detected
