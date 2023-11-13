@@ -62,12 +62,12 @@ class DistanceExtractor (object):
 		self.image_stamp = None
 		self.pointcloud_stamp = None
 
-		rospy.loginfo("Waiting for the TransformBatch service...")
-		self.transform_service = None
-		rospy.wait_for_service(self.config["node"]["transform-service-name"])
-		rospy.loginfo("Create TransformBatch service")
-		self.transform_service = rospy.ServiceProxy(self.config["node"]["transform-service-name"], TransformBatch, persistent=True)
-		self.transform_service_lock = Lock()
+		# rospy.loginfo("Waiting for the TransformBatch service...")
+		# self.transform_service = None
+		# rospy.wait_for_service(self.config["node"]["transform-service-name"])
+		# rospy.loginfo("Create TransformBatch service")
+		# self.transform_service = rospy.ServiceProxy(self.config["node"]["transform-service-name"], TransformBatch, persistent=True)
+		# self.transform_service_lock = Lock()
 
 		# Initialize the topic subscribers
 		self.image_subscriber = rospy.Subscriber(self.image_topic, Image, self.callback_image, queue_size=1, buff_size=2**28)
@@ -152,11 +152,12 @@ class DistanceExtractor (object):
 		self.image_frame = data.header.frame_id
 		self.image_stamp = data.header.stamp
 		self.latest_image = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
-		try:
-			if self.image_stamp >= self.pointcloud_stamp_array[0]:
-				self.convert_pointcloud()
-		except:
-			rospy.logerr("callback_image list index out of range")
+		self.convert_pointcloud()
+		# try:
+		# 	if self.image_stamp >= self.pointcloud_stamp_array[0]:
+		# 		self.convert_pointcloud()
+		# except:
+		# 	rospy.logerr("callback_image list index out of range")
 
 
 	def callback_pointcloud(self, data):
@@ -201,13 +202,14 @@ class DistanceExtractor (object):
 		self.lidar_to_camera = self.get_transform(self.pointcloud_frame, self.image_frame)
 		self.lidar_to_baselink = self.get_transform(self.pointcloud_frame, self.config["node"]["road-frame"])
 
-		pointcloud = np.ascontiguousarray(self.pointcloud_array[0])
-		pointcloud_stamp = self.pointcloud_stamp_array[0]
+		#pointcloud = np.ascontiguousarray(self.pointcloud_array[0])
+		pointcloud = np.ascontiguousarray(self.latest_pointcloud)
+		#pointcloud_stamp = self.pointcloud_stamp_array[0]
 		img = self.latest_image
-		img_stamp = self.image_stamp
+		#img_stamp = self.image_stamp
 
-		transforms, distances = self.get_map_transforms([pointcloud_stamp], img_stamp)
-		pointcloud = transforms[0] @ pointcloud
+		# transforms, distances = self.get_map_transforms([pointcloud_stamp], img_stamp)
+		# pointcloud = transforms[0] @ pointcloud
 
 		self.pointcloud_array = []
 		self.pointcloud_stamp_array = []
@@ -228,8 +230,8 @@ class DistanceExtractor (object):
 		# filename = f"{int(time.time()*1000)}.png"
 		# file = os.path.join("/home/gabriels/Documents", filename)
 		# cv.imwrite(file, temp_img)
-		cv.imshow('dist', temp_img)
-		cv.waitKey(5)
+		# cv.imshow('dist', temp_img)
+		# cv.waitKey(5)
 		
 
 		# If at least one traffic sign is detected
@@ -252,15 +254,17 @@ class DistanceExtractor (object):
 					result.y = np.nan
 					result.z = np.nan
 				else:
-					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
+					# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the object
 					baselink_points = self.lidar_to_baselink @ relevant_points
 					density_model = KernelDensity(kernel="epanechnikov", bandwidth=np.linalg.norm([bbx.w, bbx.h]) / 2)
 					density_model.fit(baselink_points.T)
 					point_density = density_model.score_samples(baselink_points.T)
 					rospy.loginfo(baselink_points.shape)
 
-					#index = numpy.argsort(point_density)[len(point_density)//2]
+					#index = np.argsort(point_density)[len(point_density)//2]
 					index = np.argmax(point_density)
+					#index = np.argmin(point_density)
+
 					#position_estimate = baselink_points[:, np.argmax(point_density)]
 					position_estimate = baselink_points[:, index]
 
