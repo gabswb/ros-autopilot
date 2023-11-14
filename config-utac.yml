@@ -4,7 +4,7 @@ node:
   transform-node-name: transform_batch_server              # Name of the transform service node
   visualization-node-name: visualization
 
-  object-detection-viz-topic: /object_detector_viz_topic
+  perception-viz-topic: /perception_viz_topic
   object-bbox-topic: /object_bounding_box
   image-topic: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]                              ⟶ trafficsigns, circulation
   camerainfo-topic: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]                         ⟶ trafficsigns, circulation

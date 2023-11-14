@@ -19,7 +19,7 @@ git clone https://github.com/gabswb/ros-autopilot.git catkin_ws/src
 cd catkin_ws/
 catkin_make
 cythonize -3 -a -i src/perception/scripts/fish2bird.pyx
-# if fatal error: numpy/arrayobject.h: No such file or directory => run src/perception/scripts/setup.py (setuptools package required)
+# if fatal error: numpy/arrayobject.h: No such file or directory => python src/perception/scripts/setup.py build_ext --inplace (setuptools package required)
 mv src/perception/scripts/fish2bird*.so devel/lib/python3/dist-packages/
 rm src/perception/scripts/fish2bird.c fish2bird.html
 ```
@@ -28,7 +28,6 @@ rm src/perception/scripts/fish2bird.c fish2bird.html
 Run at the root dir (the one with src/ build/ etc ...)  :
 ```sh
 roscore
-simulator # lauch utac simulator
-rosrun transformtrack transformtrack_node
-rosrun perception distance_extractor.py src/config-utac.yml
+simulator # launch utac simulator
+rosrun perception perception_core.py src/config-utac.yml -v --no-publish --lidar-projection
 ```

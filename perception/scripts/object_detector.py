@@ -5,82 +5,43 @@ import numpy as np
 import cv2
 import rospy
 import yaml
-from cv_bridge import CvBridge
 
-from sensor_msgs.msg import Image
-from perception.msg import ObjectBoundingBox
-
-class ObjectBBX(object):
-    def __init__(self, class_id, x, y, w, h):
-        self.class_id = class_id
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-
-    def to_objectbbox_msg(self):
-        msg = ObjectBoundingBox()
-        msg.class_id = self.class_id
-        msg.x = self.x
-        msg.y = self.y
-        msg.w = self.w
-        msg.h = self.h
-        return msg
+from perception.msg import Object, ObjectBoundingBox
 
 class ObjectDetector(object):
-    def __init__(self, config, publish=False, visualize=False):
+    def __init__(self, config):
         self.config = config
-        self.image_topic = self.config["node"]["image-topic"]
         self.bbox_topic = self.config["node"]["object-bbox-topic"]
-        self.object_detection_viz_topic = self.config["node"]["object-detection-viz-topic"]
         self.model_config_path = self.config["model"]["detection-model-config-path"]
         self.model_weights_path = self.config["model"]["detection-model-weights-path"]
-        self.model_class_names_path = self.config["model"]["detection-model-class-names-path"]
-        
-        self.publish = publish
-
-        self.classes = None
-        with open(self.model_class_names_path, 'r') as f:
-            self.classes = [line.strip() for line in f.readlines()]
-        self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
         # read pre-trained model and config file
         self.net = cv2.dnn.readNet(self.model_weights_path, self.model_config_path)
         self.output_layers = self.net.getUnconnectedOutLayersNames()
-        self.cvbridge = CvBridge()
 
-        self.font = cv2.FONT_HERSHEY_SIMPLEX
-        
-        if self.publish:
-            self.image_subscriber = rospy.Subscriber(self.image_topic, Image, self.detect)
-            self.object_detection_publisher = rospy.Publisher(self.bbox_topic, ObjectBoundingBox, queue_size=10)
+        rospy.loginfo("Object detector ready")	
 
-        self.visualization_publisher = None
-        if visualize:
-            self.visualization_publisher = rospy.Publisher(self.object_detection_viz_topic, Image, queue_size=10)
+    def object_constructor(self, x, y, w, h, class_id):
+        o = Object()
+        o.bbox = ObjectBoundingBox()
+        o.bbox.x = x
+        o.bbox.y = y
+        o.bbox.w = w
+        o.bbox.h = h
+        o.x = None
+        o.y = None
+        o.z = None
+        o.bbox.class_id = class_id
+        return o
 
-
-    def draw_bounding_box(self, img, class_id, confidence, x, y, x_plus_w, y_plus_h):
-        label = str(self.classes[class_id])
-        color = self.COLORS[class_id]
-        cv2.rectangle(img, (x,y), (x_plus_w,y_plus_h), color, 2)
-        cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-    def detect(self, data):
+    def detect(self, img):
         # create input blob
-        img = None
-        if self.publish:
-            img = np.frombuffer(data.data, dtype=np.uint8).reshape((data.height, data.width, 3))
-        else:
-            img =data
-
         blob = cv2.dnn.blobFromImage(img, 0.00392, (416,416), (0,0,0), True, crop=False)
         height, width, _ = img.shape
 
         # set input blob for the network
         self.net.setInput(blob)
-        # run inference through the network
-        # and gather predictions from output layers
+        # run inference through the network and gather predictions from output layers
         outs = self.net.forward(self.output_layers)
 
         # initialization
@@ -90,9 +51,7 @@ class ObjectDetector(object):
         conf_threshold = 0.5
         nms_threshold = 0.4
 
-        # for each detetion from each output layer 
-        # get the confidence, class id, bounding box params
-        # and ignore weak detections (confidence < 0.3)
+        # for each detetion from each output layer get the confidence, class id, bounding box params and ignore weak detections (confidence < 0.3)
         for out in outs:
             for detection in out:
                 scores = detection[5:]
@@ -111,30 +70,15 @@ class ObjectDetector(object):
         
         indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
 
-        # go through the detections remaining
-        # after nms and draw bounding box
+        # go through the detections remaining after nms and draw bounding box
         rospy.loginfo(f'detection') 
 
-        obj_bbox_list = []
-        
+        obj_list = []
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
-                obbx = ObjectBBX(class_ids[i], x, y, w, h)
-                if self.publish:
-                    self.object_detection_publisher.publish(obbx.to_objectbbox_msg())
-                else:
-                    obj_bbox_list.append(obbx)
-                
-                if self.visualization_publisher:
-                    self.draw_bounding_box(img, class_ids[i], confidences[i], round(x), round(y), round(x+w), round(y+h))
-
-        #display output image   
-        if self.visualization_publisher:
-            self.visualization_publisher.publish(self.cvbridge.cv2_to_imgmsg(img, encoding="passthrough"))
-        
-        if not self.publish:
-            return obj_bbox_list
+                obj_list.append(self.object_constructor(x, y, w, h, class_ids[i]))
+        return obj_list
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
