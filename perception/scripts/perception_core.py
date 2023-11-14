@@ -15,11 +15,12 @@ import numpy as np
 from perception.msg import ObjectList
 
 class Perception(object):
-    def __init__(self, config, visualize = False, publish = True, lidar_projection = False):
+    def __init__(self, config, visualize = False, publish = True, lidar_projection = False, log_objects = False):
         self.config = config
         self.visualize = visualize
         self.publish = publish
         self.lidar_projection = lidar_projection
+        self.log_objects = log_objects
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config)
@@ -76,19 +77,24 @@ class Perception(object):
             cv2.imshow('lidar projection visualization', img)
             cv2.waitKey(5)
         
-        if self.publish:
+        if self.publish and len(obj_list) > 0:
             object_list = ObjectList()
             object_list.object_list = obj_list
             self.object_info_publisher.publish(obj_list)
 
+        if self.log_objects and len(obj_list) > 0:
+            rospy.loginfo(obj_list)
+        
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection]]")
+        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection] [--log-objects]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv)
+        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv, '--log-objects')
         rospy.spin()
 
