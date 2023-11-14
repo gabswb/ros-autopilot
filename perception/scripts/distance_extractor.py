@@ -11,6 +11,7 @@ import rospy
 import tf2_ros
 import ros_numpy
 import fish2bird
+import cv2
 
 from sensor_msgs.msg import CameraInfo
 
@@ -104,6 +105,29 @@ class DistanceExtractor (object):
 
 	def lidar_to_image(self, pointcloud): 
 		return fish2bird.target_to_image(pointcloud, self.lidar_to_camera, self.camera_to_image, self.distortion_parameters[0])
+	
+	def project_lidar_to_image(self, img, img_data, point_cloud_data):
+		if (self.camera_to_image is None):
+			raise Exception("Camera info not received yet")
+
+		self.callback_image(img, img_data)
+		self.callback_pointcloud(point_cloud_data)
+
+		self.lidar_to_camera = self.get_transform(self.pointcloud_frame, self.image_frame)
+		self.lidar_to_baselink = self.get_transform(self.pointcloud_frame, self.config["node"]["road-frame"])
+		pointcloud = np.ascontiguousarray(self.pointcloud_array[0])
+
+		self.pointcloud_array = []
+		self.pointcloud_stamp_array = []
+
+		lidar_coordinates_in_image = self.lidar_to_image(pointcloud)
+		camera_pointcloud = self.lidar_to_camera @ pointcloud
+
+		# Visualize the lidar data projection onto the image
+		for i, point in enumerate(lidar_coordinates_in_image.T):
+				# Filter out points that are not in the image dimension or behind the camera
+				if 0 <= point[0] < img.shape[1] and 0 <= point[1] < img.shape[0] and camera_pointcloud[2, i] >=0:
+					cv2.drawMarker(img, (int(point[0]), int(point[1])), (0, 255, 0), cv2.MARKER_CROSS, 4)
 
 	def get_object_positions(self, img, img_data, point_cloud_data, obj_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera and publish the distance to the traffic sign bounding box on the topic"""
