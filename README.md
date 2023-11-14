@@ -29,5 +29,5 @@ Run at the root dir (the one with src/ build/ etc ...)  :
 ```sh
 roscore
 simulator # launch utac simulator
-rosrun perception perception.py src/config-utac.yml
+rosrun perception perception_core.py src/config-utac.yml -v --no-publish
 ```

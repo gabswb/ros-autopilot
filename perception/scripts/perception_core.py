@@ -12,13 +12,13 @@ import rospy
 import cv2
 import numpy as np
 
-# from perception.msg import ObjectList
-
+from perception.msg import ObjectList
 
 class Perception(object):
-    def __init__(self, config, visualize):
+    def __init__(self, config, visualize = False, publish = True):
         self.config = config
         self.visualize = visualize
+        self.publish = publish
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config)
@@ -26,7 +26,7 @@ class Perception(object):
 
         # Publisher
         self.visualization_publisher = rospy.Publisher(config["node"]["perception-viz-topic"], Image, queue_size=10)
-        self.object_info_publisher = rospy.Publisher(config["node"]["object-info-topic"], Image, queue_size=10)
+        self.object_info_publisher = rospy.Publisher(config["node"]["object-info-topic"], ObjectList, queue_size=10)
 
         # Visualation utils
         if self.visualize:
@@ -62,27 +62,26 @@ class Perception(object):
         
         if self.visualize and len(obj_list) > 0:
             for obj in obj_list:
-                self.draw_bounding_box(img, obj.bbox.class_id, round(obj.bbox.x), round(obj.bbox.y), round(obj.bbox.x + obj.bbox.w), round(obj.bbox.y + obj.bbox.h), np.linalg.norm([obj.x, obj.y, obj.z]))
-            
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        cv2.imshow('dist', img)
-        cv2.waitKey(5) 
+                self.draw_bounding_box(img, obj.bbox.class_id, round(obj.bbox.x), round(obj.bbox.y), round(obj.bbox.x + obj.bbox.w), round(obj.bbox.y + obj.bbox.h), obj.z)
+        
+        if self.visualize:
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            cv2.imshow('dist', img)
+            cv2.waitKey(5)
+        
+        if self.publish:
+            object_list = ObjectList()
+            object_list.object_list = obj_list
+            self.object_info_publisher.publish(obj_list)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v]")
+        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-
-        p = Perception(config, '-v' in sys.argv)
-            # publish object list
-            # object_list = ObjectList()
-            # for obj in obj_list:
-                # obj.to_msg()
-            # object_list.object_list = obj_list
-            # object_info_publisher.publish(object_list)
+        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv)
         rospy.spin()
 

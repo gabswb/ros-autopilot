@@ -6,10 +6,10 @@ import cv2
 import rospy
 import yaml
 
-from Obj import Obj
+from perception.msg import Object, ObjectBoundingBox
 
 class ObjectDetector(object):
-    def __init__(self, config, publish=False):
+    def __init__(self, config):
         self.config = config
         self.bbox_topic = self.config["node"]["object-bbox-topic"]
         self.model_config_path = self.config["model"]["detection-model-config-path"]
@@ -20,6 +20,19 @@ class ObjectDetector(object):
         self.output_layers = self.net.getUnconnectedOutLayersNames()
 
         rospy.loginfo("Object detector ready")	
+
+    def object_constructor(self, x, y, w, h, class_id):
+        o = Object()
+        o.bbox = ObjectBoundingBox()
+        o.bbox.x = x
+        o.bbox.y = y
+        o.bbox.w = w
+        o.bbox.h = h
+        o.x = None
+        o.y = None
+        o.z = None
+        o.bbox.class_id = class_id
+        return o
 
     def detect(self, img):
         # create input blob
@@ -64,9 +77,7 @@ class ObjectDetector(object):
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
-                obbx = Obj(class_ids[i], x, y, w, h)
-                obj_list.append(obbx)
-                
+                obj_list.append(self.object_constructor(x, y, w, h, class_ids[i]))
         return obj_list
 
 if __name__ == '__main__':
