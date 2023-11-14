@@ -21,18 +21,6 @@ class ObjectDetector(object):
 
         rospy.loginfo("Object detector ready")	
 
-    def object_constructor(self, x, y, w, h, class_id):
-        o = Object()
-        o.bbox = ObjectBoundingBox()
-        o.bbox.x = x
-        o.bbox.y = y
-        o.bbox.w = w
-        o.bbox.h = h
-        o.x = None
-        o.y = None
-        o.z = None
-        o.bbox.class_id = class_id
-        return o
 
     def detect(self, img):
         # create input blob
@@ -73,12 +61,19 @@ class ObjectDetector(object):
         # go through the detections remaining after nms and draw bounding box
         rospy.loginfo(f'detection') 
 
-        obj_list = []
+        bbox_list = []
         for i in range(len(boxes)):
             for i in indices:
                 x, y, w, h = boxes[i]
-                obj_list.append(self.object_constructor(x, y, w, h, class_ids[i]))
-        return obj_list
+                msg_bbox = ObjectBoundingBox()
+                msg_bbox.x = x
+                msg_bbox.y = y
+                msg_bbox.w = w
+                msg_bbox.h = h
+                msg_bbox.class_id = class_ids[i]
+                bbox_list.append(msg_bbox)
+        return bbox_list
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
@@ -86,8 +81,8 @@ if __name__ == '__main__':
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
-    rospy.init_node('object_detector')
-    node = ObjectDetector(config, visualize=True)
-    rospy.spin()
+        rospy.init_node('object_detector')
+        node = ObjectDetector(config, visualize=True)
+        rospy.spin()
 
 
