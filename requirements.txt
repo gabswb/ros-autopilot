@@ -1,5 +1,4 @@
 scikit-image>=0.20.0
-Cython>=0.29.32
 scikit-learn
 transforms3d
 ros-noetic-ros-numpy

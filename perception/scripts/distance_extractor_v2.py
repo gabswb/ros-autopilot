@@ -89,14 +89,15 @@ class DistanceExtractor (object):
 		self.distortion_parameter = data.D[0]
 		self.camerainfo_subscriber.unregister()
 
-	def crop_bbox(bbox, scale):
+	def crop_bbox(self, bbox, scale):
 		bbox_cropped = ObjectBoundingBox()
 		x_crop = bbox.w//scale
 		y_crop = bbox.h//scale
-		bbox_cropped.x += x_crop
-		bbox_cropped.y += y_crop
-		bbox_cropped.w -= x_crop*2
-		bbox_cropped.h -= y_crop*2
+		bbox_cropped.x = bbox.x + x_crop
+		bbox_cropped.y = bbox.y + y_crop
+		bbox_cropped.w = bbox.w - x_crop*2
+		bbox_cropped.h = bbox.h - y_crop*2
+		bbox_cropped.class_id = bbox.class_id
 		return bbox_cropped
 
 
@@ -136,7 +137,7 @@ class DistanceExtractor (object):
 			object_list = []
 
 			for bbox in bbox_list:
-				bbox_cropped = self.crop_bbox(bbox,3)
+				bbox_cropped = self.crop_bbox(bbox, 3)
 
 				filter = ((bbox_cropped.x <= image_points[0]) & (image_points[0] <= bbox_cropped.x + bbox_cropped.w) &
 			  			  (bbox_cropped.y <= image_points[1]) & (image_points[1] <= bbox_cropped.y + bbox_cropped.h))
@@ -145,7 +146,8 @@ class DistanceExtractor (object):
 
 				# distances in the camera frame 
 				distances = np.linalg.norm(relevant_points_camera[:3,:], axis=0) #(N'',)
-				
+				if len(distances) == 0: continue # non lidar points projected onto the object
+
 				#index = np.argsort(distances)[len(distances)//4]
 				index = np.argmin(distances)
 				distance = distances[index]

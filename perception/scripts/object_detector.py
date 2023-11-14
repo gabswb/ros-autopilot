@@ -59,7 +59,6 @@ class ObjectDetector(object):
         indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
 
         # go through the detections remaining after nms and draw bounding box
-        rospy.loginfo(f'detection') 
 
         bbox_list = []
         for i in range(len(boxes)):

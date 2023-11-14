@@ -66,7 +66,7 @@ class Perception(object):
         
         if self.visualize and len(obj_list) > 0:
             for obj in obj_list:
-                self.draw_bounding_box(img, obj.bbox.class_id, round(obj.bbox.x), round(obj.bbox.y), round(obj.bbox.x + obj.bbox.w), round(obj.bbox.y + obj.bbox.h), obj.z)
+                self.draw_bounding_box(img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w, obj.bbox.y + obj.bbox.h, obj.distance)
         
         if self.visualize:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
