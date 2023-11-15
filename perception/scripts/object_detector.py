@@ -48,11 +48,11 @@ class ObjectDetector(object):
                 if confidence > 0.3:
                     center_x = int(detection[0] * width)
                     center_y = int(detection[1] * height)
-                    w = int(detection[2] * width)
-                    h = int(detection[3] * height)
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-                    class_ids.append(int(class_id))
+                    w = np.uint32(detection[2] * width)
+                    h = np.uint32(detection[3] * height)
+                    x = np.uint32(center_x - w / 2)
+                    y = np.uint32(center_y - h / 2)
+                    class_ids.append(np.uint32(class_id))
                     confidences.append(float(confidence))
                     boxes.append([x, y, w, h])
         

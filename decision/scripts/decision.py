@@ -11,7 +11,7 @@ from perception.msg import ObjectList, Object, ObjectBoundingBox
 
 
 to_not_kill = (0,2) # person, car
-THRESHOLD_DISTANCE = 10 # meters
+THRESHOLD_DISTANCE = 4 # meters
 RATE = 10 # Hz
 
 class Controller(object):
@@ -60,15 +60,14 @@ class Controller(object):
         self.real_angular_speed = velocity_msg.angular.z
 
     def publish_control_inputs(self, ):
-        print("publishing control inputs")
         """Publish the control inputs to the car"""
         if len(self.object_list) > 0:
             for obj in self.object_list:
                 if obj.bbox.class_id in to_not_kill:
-                    # TODO uncomment when distance is wokring
-                    # if obj.d < THRESHOLD_DISTANCE:
-                    print(f"STOP car")
-                    self.speed_publisher.publish(0)
+                    print(obj.distance)
+                    if obj.distance < THRESHOLD_DISTANCE:
+                        print(f"STOP car")
+                        self.speed_publisher.publish(0)
 
 import os
 if __name__ == "__main__":
