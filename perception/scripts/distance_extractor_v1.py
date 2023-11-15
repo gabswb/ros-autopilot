@@ -14,6 +14,8 @@ import fish2bird
 import cv2
 
 from sensor_msgs.msg import CameraInfo
+from perception.msg import Object, ObjectBoundingBox
+
 
 DISTANCE_SCALE_MIN = 0
 DISTANCE_SCALE_MAX = 160
@@ -70,11 +72,12 @@ class DistanceExtractor (object):
 			np.asarray((0, 0, 0, 1)).reshape((1, 4))
 		), axis=0)
 
-	def callback_image(self, img, img_data):
+	def callback_image(self, img_data):
 		"""Extract an image from the camera"""
 		self.image_frame = img_data.header.frame_id
 		self.image_stamp = img_data.header.stamp
-		self.latest_image = img
+		self.latest_image = np.frombuffer(img_data.data, dtype=np.uint8).reshape((img_data.height, img_data.width, 3))
+
 
 	def callback_pointcloud(self, data):
 		"""Extract a point cloud from the lidar"""
@@ -129,12 +132,12 @@ class DistanceExtractor (object):
 				if 0 <= point[0] < img.shape[1] and 0 <= point[1] < img.shape[0] and camera_pointcloud[2, i] >=0:
 					cv2.drawMarker(img, (int(point[0]), int(point[1])), (0, 255, 0), cv2.MARKER_CROSS, 4)
 
-	def get_object_positions(self, img, img_data, point_cloud_data, obj_list):
+	def get_objects_position(self, img_data, point_cloud_data, bbox_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera and publish the distance to the traffic sign bounding box on the topic"""
 		if (self.camera_to_image is None):
 			raise Exception("Camera info not received yet")
 
-		self.callback_image(img, img_data)
+		self.callback_image(img_data)
 		self.callback_pointcloud(point_cloud_data)
 
 		self.lidar_to_camera = self.get_transform(self.pointcloud_frame, self.image_frame)
@@ -145,16 +148,20 @@ class DistanceExtractor (object):
 
 		lidar_coordinates_in_image = self.lidar_to_image(pointcloud)
 
-		for i, obj in enumerate(obj_list):
+		obj_list = []
+
+		for bbox in bbox_list:
+			obj = Object()
+			obj.bbox = bbox
 			relevant_points_filter = ((obj.bbox.x <= lidar_coordinates_in_image[0]) & (lidar_coordinates_in_image[0] <= obj.bbox.x + obj.bbox.w) &
 										(obj.bbox.y <= lidar_coordinates_in_image[1]) & (lidar_coordinates_in_image[1] <= obj.bbox.y + obj.bbox.h))
 			relevant_points = pointcloud[:, relevant_points_filter]
 			
 			# We can still publish that we’ve seen it just in case, but we have no information on its position whatsoever
 			if relevant_points.shape[1] == 0:
-				obj_list[i].x = np.nan
-				obj_list[i].y = np.nan
-				obj_list[i].z = np.nan
+				obj.x = np.nan
+				obj.y = np.nan
+				obj.z = np.nan
 			else:
 				# Maximum density estimation to disregard the points that might be in the hitbox but physically behind the sign
 				baselink_points = self.lidar_to_baselink @ relevant_points
@@ -164,9 +171,11 @@ class DistanceExtractor (object):
 
 				index = np.argmax(point_density)
 				position_estimate = baselink_points[:, index]
-				obj_list[i].x = position_estimate[0]
-				obj_list[i].y = position_estimate[1]
-				obj_list[i].z = position_estimate[2]
+				obj.x = position_estimate[0]
+				obj.y = position_estimate[1]
+				obj.z = position_estimate[2]
+			
+			obj_list.append(obj)
 
 		return obj_list
 

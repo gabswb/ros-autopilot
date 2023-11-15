@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import cProfile
+
 import sys
 
 import yaml
@@ -7,7 +9,7 @@ import rospy
 import numpy as np
 import cv2
 
-from perception.msg import ObjectList
+from perception.msg import ObjectList, ObjectBoundingBox
 from sensor_msgs.msg import Image, PointCloud2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
@@ -64,6 +66,9 @@ class Perception(object):
         obj_list = []
         if len(bbox_list) > 0:
             obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)
+            
+            # cProfile.runctx("self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)", globals(), locals(), filename="out.prof")
+            # rospy.signal_shutdown('')
         
         if self.visualize and len(obj_list) > 0:
             for obj in obj_list:
