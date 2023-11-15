@@ -82,7 +82,7 @@ class Perception(object):
         if self.lidar_projection:
             self.distance_extractor.project_lidar_to_image(img_data, point_cloud_data)
         
-        if self.publish and len(obj_list) > 0:
+        if self.publish:
             object_list = ObjectList()
             object_list.object_list = obj_list
             self.object_info_publisher.publish(obj_list)

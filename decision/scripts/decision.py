@@ -10,7 +10,7 @@ from geometry_msgs.msg import TwistStamped
 from perception.msg import ObjectList, Object, ObjectBoundingBox
 
 
-to_not_kill = (0,2) # person, car
+to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
 THRESHOLD_DISTANCE = 10 # meters
 RATE = 10 # Hz
 
@@ -26,11 +26,17 @@ class Controller(object):
         self.steering_angle_topic = self.config["node"]["steering-angle-topic"]
         self.object_info_topic = self.config["node"]["object-info-topic"]
         self.direction_topic = self.config["node"]["direction-topic"]
+        self.class_name_path = self.config["model"]["detection-model-class-names-path"]
 
         # Situation states
         self.real_speed = None
         self.real_angular_speed = None
         self.object_list = []
+
+        # Get classes names
+        self.classes = None
+        with open(self.class_name_path, 'r') as f:
+            self.classes = [line.strip() for line in f.readlines()]
 
         # Initialize perception topic subscribers
         self.perception_subscriber = rospy.Subscriber(self.object_info_topic, ObjectList, self.callback_perception)
@@ -43,11 +49,12 @@ class Controller(object):
         self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
         self.steering_angle_publisher = rospy.Publisher(self.steering_angle_topic, Float32, queue_size=10)
         self.direction_publisher = rospy.Publisher(self.direction_topic, UInt8, queue_size=1)
+        rospy.loginfo("Decision ready")
+
 
     def callback_perception(self, data):
         """Callback called to get the list of objects from the perception topic"""
         # TODO not automatically remove list (add kalman filter or a confidence timing befor removing)
-        rospy.loginfo("Received a perception")
         self.object_list = data.object_list
 
     def callback_velocity(self, data):
@@ -60,21 +67,17 @@ class Controller(object):
         self.real_angular_speed = velocity_msg.angular.z
 
     def publish_control_inputs(self, ):
-        print("publishing control inputs")
         """Publish the control inputs to the car"""
         if len(self.object_list) > 0:
             for obj in self.object_list:
                 if obj.bbox.class_id in to_not_kill:
-                    # TODO uncomment when distance is wokring
-                    # if obj.d < THRESHOLD_DISTANCE:
-                    print(f"STOP car")
-                    self.speed_publisher.publish(0)
+                    rospy.loginfo(f"{obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                    if obj.distance < THRESHOLD_DISTANCE:
+                        rospy.loginfo(f"STOP")
+                        self.speed_publisher.publish(0)
 
 import os
 if __name__ == "__main__":
-
-    # show current directory
-    print("current directory: ", os.getcwd())
     if len(sys.argv) < 2:
         print(f"Usage : {sys.argv[0]} <parameter-file>")
     else:
