@@ -166,6 +166,7 @@ class DistanceExtractor (object):
 
 
 	def project_lidar_to_image(self, image_data, pointcloud_data):
+		"""VISUALIZATION PURPUSE ONLY: Superimpose a point cloud from the lidar onto an image from the camera"""
 		image_frame, image = self.image_preprocessing(image_data)
 		pointcloud_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
 
