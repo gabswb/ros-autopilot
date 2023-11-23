@@ -17,17 +17,18 @@ from distance_extractor_v2 import DistanceExtractor
 
 
 class Perception(object):
-    def __init__(self, config, visualize = False, publish = True, lidar_projection = False, log_objects = False, time_statistics = False):
+    def __init__(self, config, visualize = False, publish = True, lidar_projection = False, log_objects = False, time_statistics = False, yolov5 = False):
         self.config = config
         self.visualize = visualize
         self.publish = publish
         self.lidar_projection = lidar_projection
         self.log_objects = log_objects
         self.time_statistics = time_statistics
+        self.yolov5 = yolov5
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config)
-        self.object_detector = ObjectDetector(config)
+        self.object_detector = ObjectDetector(config, yolov5)
 
         # Publisher
         self.visualization_publisher = rospy.Publisher(config["node"]["perception-viz-topic"], Image, queue_size=10)
@@ -36,7 +37,7 @@ class Perception(object):
         # visualization utils
         if self.visualize:
             self.classes = None
-            with open(config["model"]["detection-model-class-names-path"], 'r') as f:
+            with open(config["model"]["yolov4-class-names-path"], 'r') as f:
                 self.classes = [line.strip() for line in f.readlines()]
             self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
@@ -63,7 +64,7 @@ class Perception(object):
             overall_start = time.time()
 
         img = np.frombuffer(img_data.data, dtype=np.uint8).reshape((img_data.height, img_data.width, 3))
-        if self.time_statistics:
+        # rospy.loginfo(f"Image shape: {img.shape}")
 
         # detect objects
         if self.time_statistics:
@@ -115,12 +116,12 @@ class Perception(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection] [--log-objects] [--time-statistics]]")
+        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov5]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv)
+        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov5' in sys.argv)
         rospy.spin()
 

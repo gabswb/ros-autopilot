@@ -19,7 +19,8 @@ node:
   lines-viz-topic: /navigation/viz/lines                   # Line detection visualization        : circulation        ⟶ [Image]                              ⟶ rviz
   trajectory-viz-topic: /navigation/viz/trajectory         # Trajectory visualization            : circulation        ⟶ [Image]                              ⟶ rviz
   trafficsigns-viz-topic: /navigation/viz/trafficsigns     # Line detection visualization        : trafficsigns       ⟶ [Image]                              ⟶ rviz
-
+  image-topic-width: 1028
+  image-topic-height: 771
 
   transform-service-name: /circulation/TransformBatch      # Transform service address
   drop-service-name: /circulation/DropVelocity             # Transform service data drop address. To be used ONLY by circulation
@@ -31,9 +32,11 @@ node:
   time-discrepancy: false                                  # Correct the timestamp discrepancies in the simulator versions < 27/12/2022 messages
 
 model:
-  detection-model-class-names-path: src/yolov4-tiny/classes.names
-  detection-model-weights-path: src/yolov4-tiny/yolov4-tiny.weights
-  detection-model-config-path: src/yolov4-tiny/yolov4-tiny.cfg
+  yolov4-class-names-path: src/yolov4-tiny/classes.names
+  yolov4-weights-path: src/yolov4-tiny/yolov4-tiny.weights
+  yolov4-config-path: src/yolov4-tiny/yolov4-tiny.cfg
+  yolov5n-onnx-model-path: src/yolov5n/YOLOv5n.onnx
+  yolov5n6-onnx-model-path: src/yolov5n/YOLOv5n6.onnx
 
 # Transform service parameters
 transform:

@@ -8,16 +8,28 @@ import yaml
 
 from perception.msg import ObjectBoundingBox
 
+MODEL_INPUT_WIDTH = MODEL_INPUT_HEIGHT = 416
+
 class ObjectDetector(object):
-    def __init__(self, config):
+    def __init__(self, config, yolov5):
         self.config = config
         self.bbox_topic = self.config["node"]["object-bbox-topic"]
-        self.model_config_path = self.config["model"]["detection-model-config-path"]
-        self.model_weights_path = self.config["model"]["detection-model-weights-path"]
+        self.yolov4_config_path = self.config["model"]["yolov4-config-path"]
+        self.yolov4_weights_path = self.config["model"]["yolov4-weights-path"]
+        self.yolov5_onnx_path = self.config['model']['yolov5n-onnx-model-path']
+        self.image_topic_width = self.config['node']['image-topic-width']
+        self.image_topic_height = self.config['node']['image-topic-height']
+        self.yolov5 = yolov5
 
         # read pre-trained model and config file
-        self.net = cv2.dnn.readNet(self.model_weights_path, self.model_config_path)
+        self.net = None
+        if self.yolov5:
+            self.net = cv2.dnn.readNetFromONNX(self.yolov5_onnx_path)
+        else:
+            self.net = cv2.dnn.readNet(self.yolov4_weights_path, self.yolov4_config_path)
         self.output_layers = self.net.getUnconnectedOutLayersNames()
+        self.confidence_threshold = 0.45
+        self.nms_threshold = 0.45
 
         # object association variables
         self.confidence_matching = 300
@@ -72,54 +84,85 @@ class ObjectDetector(object):
         msg_bbox.class_id = class_id
         msg_bbox.instance_id = instance_id
         return msg_bbox
-
-    def detect(self, img):
-        """Detect objects in the image"""
-        # create input blob
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (416,416), (0,0,0), True, crop=False)
-        height, width, _ = img.shape
-
-        # set input blob for the network
-        self.net.setInput(blob)
-        # run inference through the network and gather predictions from output layers
-        outs = self.net.forward(self.output_layers)
-
-        # initialization
+    
+    def yolov5_output_to_bbox(self, outputs):
         class_ids = []
         confidences = []
         boxes = []
-        conf_threshold = 0.5
-        nms_threshold = 0.1
+        # Rows.
+        rows = outputs[0].shape[1]
+        # Resizing factor.
+        x_factor = self.image_topic_width / MODEL_INPUT_WIDTH
+        y_factor =  self.image_topic_height / MODEL_INPUT_HEIGHT
 
-        # for each detetion from each output layer get the confidence, class id, bounding box params and ignore weak detections (confidence < 0.3)
-        for out in outs:
+        # Iterate through detections.
+        for r in range(rows):
+                row = outputs[0][0][r]
+                confidence = row[4]
+                # Discard bad detections and continue.
+                if confidence >= self.confidence_threshold:
+                    classes_scores = row[5:]
+                    # Get the index of max class score.
+                    class_id = np.argmax(classes_scores)
+                    #  Continue if the class score is above threshold.
+                    if classes_scores[class_id] > 0.5:
+                        cx, cy, w, h = row[0], row[1], row[2], row[3]
+                        left = int((cx - w/2) * x_factor)
+                        top = int((cy - h/2) * y_factor)
+                        width = int(w * x_factor)
+                        height = int(h * y_factor)
+                        if left < self.image_topic_width and top < self.image_topic_height:
+                            confidences.append(confidence)
+                            class_ids.append(class_id)
+                            box = np.array([left, top, width, height])
+                            boxes.append(box)
+                        else:
+                            rospy.loginfo(f"Detection out of bounds: {left}, {top}, {width}, {height}")
+        
+        return boxes, class_ids, confidences
+
+    def yolov4_output_to_bbox(self, outputs):
+        class_ids = []
+        confidences = []
+        boxes = []
+        for out in outputs:
             for detection in out:
                 scores = detection[5:]
                 class_id = np.argmax(scores)
                 confidence = scores[class_id]
-                if confidence > 0.3:
-                    center_x = int(detection[0] * width)
-                    center_y = int(detection[1] * height)
-                    w = np.uint32(detection[2] * width)
-                    h = np.uint32(detection[3] * height)
+                if confidence > self.confidence_threshold:
+                    center_x = int(detection[0] * self.image_topic_width)
+                    center_y = int(detection[1] * self.image_topic_height)
+                    w = np.uint32(detection[2] * self.image_topic_width)
+                    h = np.uint32(detection[3] * self.image_topic_height)
                     x = np.uint32(center_x - w / 2)
                     y = np.uint32(center_y - h / 2)
-                    if x < width and y < height:
+                    if x < self.image_topic_width and y < self.image_topic_height:
                         class_ids.append(np.uint32(class_id))
                         confidences.append(float(confidence))
                         boxes.append([x, y, w, h])
                     else:
                         rospy.loginfo(f"Detection out of bounds: {x}, {y}, {w}, {h}")
-        
-        indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
 
+        return boxes, class_ids, confidences
+
+    def detect(self, img):
+        """Detect objects in the image"""
+        # create input blob
+        blob = cv2.dnn.blobFromImage(img, 0.00392, (MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH), (0,0,0), True, crop=False)
+
+        # set input blob for the network
+        self.net.setInput(blob)
+        # run inference through the network and gather predictions from output layers
+        outputs = self.net.forward(self.output_layers)
+
+        boxes, class_ids, confidences = self.yolov5_output_to_bbox(outputs) if self.yolov5 else self.yolov4_output_to_bbox(outputs)     
+        indices = cv2.dnn.NMSBoxes(boxes, confidences, self.confidence_threshold, self.nms_threshold)
+        
         # go through the detections remaining after nms and draw bounding box
         bbox_list = []
         for i in indices:
-            msg_bbox = self.create_bbox_msg(boxes[i], class_ids[i])
-            if msg_bbox in bbox_list:
-                continue # delete duplicate not filtered by NMS
-            bbox_list.append(msg_bbox)
+            bbox_list.append(self.create_bbox_msg(boxes[i], class_ids[i]))
         return bbox_list
 
     def bbox_associations_and_predictions(self, bbox_list):
