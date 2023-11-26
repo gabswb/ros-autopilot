@@ -35,11 +35,11 @@ node:
   road-network-path: src/road_network.json  
 
 model:
-  yolov4-class-names-path: src/yolov4-tiny/classes.names
-  yolov4-weights-path: src/yolov4-tiny/yolov4-tiny.weights
-  yolov4-config-path: src/yolov4-tiny/yolov4-tiny.cfg
-  yolov5n-onnx-model-path: src/yolov5n/YOLOv5n.onnx
-  yolov5n6-onnx-model-path: src/yolov5n/YOLOv5n6.onnx
+  yolov4-class-names-path: src/models/yolov4-tiny/classes.names
+  yolov4-weights-path: src/models/yolov4-tiny/yolov4-tiny.weights
+  yolov4-config-path: src/models/yolov4-tiny/yolov4-tiny.cfg
+  yolov5n-onnx-model-path: src/models/yolov5n/YOLOv5n.onnx
+  yolov5n6-onnx-model-path: src/models/yolov5n/YOLOv5n6.onnx
 
 
 
