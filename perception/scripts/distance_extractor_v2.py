@@ -3,6 +3,7 @@
 import sys
 import rospy
 import yaml
+import json
 
 import cv2 as cv
 import numpy as np
@@ -21,8 +22,13 @@ DISTANCE_SCALE_MIN = 0
 DISTANCE_SCALE_MAX = 160
 
 class DistanceExtractor (object):
-	def __init__(self, config):
+	def __init__(self, config, visualize_lidar):
 		self.config = config
+		self.visualize_lidar = visualize_lidar
+
+		self.road_network = None
+		with open(self.config["node"]["road-network-path"], 'r') as f:
+			self.road_network = json.load(f)
 
 		# Initialize the topic subscribers
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
@@ -100,16 +106,53 @@ class DistanceExtractor (object):
 		bbox_cropped.class_id = bbox.class_id
 		return bbox_cropped
 
+	def point_on_road(self, x, y):
+		'''Return true if point (x,y) is on the road
+			-x,y coordinates of the point in the map frame
+		'''
+		for segment in self.road_network:
+			geometry = segment["geometry"]
+			px_values = [point["px"] for point in geometry]
+			py_values = [point["py"] for point in geometry]
+			tx_values = [point["tx"] for point in geometry]
+			ty_values = [point["ty"] for point in geometry]
+			width = segment["geometry"][0]["width"]
+
+			# Calculate perpendicular vectors to represent the road boundaries
+			dx = np.array([-ty for ty in ty_values])
+			dy = np.array([tx for tx in tx_values])
+
+			length = np.sqrt(dx**2 + dy**2)
+			dx /= length
+			dy /= length
+
+			# Calculate road boundaries
+			left_boundary_x = px_values - (width / 2) * dx
+			left_boundary_y = py_values - (width / 2) * dy
+			right_boundary_x = px_values + (width / 2) * dx
+			right_boundary_y = py_values + (width / 2) * dy
+
+			# Check if the point is within the bounding box of the road segment
+			for i in range(len(px_values) - 1):
+				if min(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) <= x <= max(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) and \
+				min(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]) <= y <= max(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]):
+					return True
+
+		return False
 
 	def get_objects_position(self, image_data, pointcloud_data, bbox_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera"""
 
+		object_list = []		
+
 		if len(bbox_list) > 0:
+
 			image_frame, image = self.image_preprocessing(image_data)
 			pointcloud_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
 
 			sensor_to_image = self.sensor_to_image
 			lidar_to_camera = self.get_transform(pointcloud_frame, image_frame)
+			
 
 			pointcloud_camera = lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
 
@@ -134,7 +177,18 @@ class DistanceExtractor (object):
 				pointcloud_image[1] / (pointcloud_image[2]),
 			)) # (2,N')
 
-			object_list = []
+			if self.visualize_lidar:
+				image = cv.cvtColor(image, cv.COLOR_RGB2HSV)
+				colors = self.get_color(ro)
+
+				# Write all points to the final image
+				for color, point in zip(colors, image_points.T):
+					if 0 <= point[0] < image.shape[1] and 0 <= point[1] < image.shape[0]:
+						cv.drawMarker(image, (int(point[0]), int(point[1])), (int(color[0]), int(color[1]), int(color[2])), cv.MARKER_CROSS, 4)
+
+				image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
+				cv.imshow('lidar_projection', image)
+				cv.waitKey(1)
 
 			for bbox in bbox_list:
 				bbox_cropped = self.crop_bbox(bbox, 3)
@@ -153,9 +207,16 @@ class DistanceExtractor (object):
 				distance = distances[index]
 				position = pointcloud_camera[:, index]
 
+				# filter out object that are not on the road
+				camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
+				position_map = camera_to_map @ position.T
+				if not self.point_on_road(position_map[0], position_map[1]):
+					continue
+				rospy.loginfo("On the road")
+
 				obj = Object()
 				obj.bbox = bbox
-				obj.distance = distance
+				obj.distance = distance/2
 				obj.x = position[0]
 				obj.y = position[1]
 				obj.z = position[2]
@@ -163,51 +224,7 @@ class DistanceExtractor (object):
 				object_list.append(obj)
 				 
 		return object_list
-
-
-	def project_lidar_to_image(self, image_data, pointcloud_data):
-		image_frame, image = self.image_preprocessing(image_data)
-		pointcloud_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
-
-		sensor_to_image = self.sensor_to_image
-		lidar_to_camera = self.get_transform(pointcloud_frame, image_frame)
-
-
-		pointcloud_camera = lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
-
-		# Filter out points that are behind the camera, otherwise the following calculations overlay them on the image with inverted coordinates
-		valid_points = (pointcloud_camera[2, :] >= 0) # (N,)
-		pointcloud_camera = pointcloud_camera[:, valid_points] # (4,N')
-		pointcloud = pointcloud[:, valid_points] # (4,N')
-
-		ro = np.linalg.norm(pointcloud_camera[:3,:], axis=0) # (N',)
-
-		pointcloud_sensor = np.asarray((
-			pointcloud_camera[0] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
-			pointcloud_camera[1] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
-			np.ones(pointcloud_camera.shape[1])
-		))
-
-		pointcloud_image = sensor_to_image @ pointcloud_sensor # (3,N')
-
-		# Finalize the projection ([u v w] ⟶ [u/w v/w])
-		image_points = np.asarray((
-			pointcloud_image[0] / (pointcloud_image[2]),
-			pointcloud_image[1] / (pointcloud_image[2]),
-		)) # (2,N')
-
-		
-		image = cv.cvtColor(image, cv.COLOR_RGB2HSV)
-		colors = self.get_color(ro)
-
-		# Write all points to the final image
-		for color, point in zip(colors, image_points.T):
-			if 0 <= point[0] < image.shape[1] and 0 <= point[1] < image.shape[0]:
-				cv.drawMarker(image, (int(point[0]), int(point[1])), (int(color[0]), int(color[1]), int(color[2])), cv.MARKER_CROSS, 4)
-
-		image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
-		cv.imshow('lidar_projection', image)
-		cv.waitKey(5)
+	
 
 	def get_color(self, distances):
 		# Generate the color gradient from point distances
@@ -221,11 +238,11 @@ class DistanceExtractor (object):
 
 if __name__ == "__main__":
 	if len(sys.argv) < 2:
-		print(f"Usage : {sys.argv[0]} <config-file>")
+		print(f"Usage : {sys.argv[0]} <config-file> [--viz-lidar]")
 	else:
 		with open(sys.argv[1], "r") as config_file:
 			config = yaml.load(config_file, yaml.Loader)
 		rospy.init_node("distances")
-		node = DistanceExtractor(config)
+		node = DistanceExtractor(config, '--viz-lidar' in sys.argv)
 		rospy.spin()
 

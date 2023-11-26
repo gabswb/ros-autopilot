@@ -26,7 +26,7 @@ class Perception(object):
         self.log_objects = log_objects
 
         # Detection module
-        self.distance_extractor = DistanceExtractor(config)
+        self.distance_extractor = DistanceExtractor(config, self.lidar_projection)
         self.object_detector = ObjectDetector(config)
 
         # Publisher
@@ -67,8 +67,6 @@ class Perception(object):
         if len(bbox_list) > 0:
             obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)
             
-            # cProfile.runctx("self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)", globals(), locals(), filename="out.prof")
-            # rospy.signal_shutdown('')
         
         if self.visualize and len(obj_list) > 0:
             for obj in obj_list:
@@ -78,9 +76,6 @@ class Perception(object):
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             cv2.imshow('perception visualization', img)
             cv2.waitKey(5)
-            
-        if self.lidar_projection:
-            self.distance_extractor.project_lidar_to_image(img_data, point_cloud_data)
         
         if self.publish:
             object_list = ObjectList()

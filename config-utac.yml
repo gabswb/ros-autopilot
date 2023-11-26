@@ -24,16 +24,21 @@ node:
   transform-service-name: /circulation/TransformBatch      # Transform service address
   drop-service-name: /circulation/DropVelocity             # Transform service data drop address. To be used ONLY by circulation
 
-  road-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
   world-frame: map                                         # Fixed frame of reference
+  car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
+  forward-camera-frame: camera_forward_optical_frame
 
   visualize: true                                          # Enable visualizations
   time-discrepancy: false                                  # Correct the timestamp discrepancies in the simulator versions < 27/12/2022 messages
+
+  road-network-path: src/road_network.json  
 
 model:
   detection-model-class-names-path: src/yolov4-tiny/classes.names
   detection-model-weights-path: src/yolov4-tiny/yolov4-tiny.weights
   detection-model-config-path: src/yolov4-tiny/yolov4-tiny.cfg
+
+
 
 # # Transform service parameters
 # transform:
