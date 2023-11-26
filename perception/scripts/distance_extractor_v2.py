@@ -22,13 +22,15 @@ DISTANCE_SCALE_MIN = 0
 DISTANCE_SCALE_MAX = 160
 
 class DistanceExtractor (object):
-	def __init__(self, config, visualize_lidar):
+	def __init__(self, config, visualize_lidar, use_map):
 		self.config = config
 		self.visualize_lidar = visualize_lidar
+		self.use_map = use_map
 
-		self.road_network = None
-		with open(self.config["node"]["road-network-path"], 'r') as f:
-			self.road_network = json.load(f)
+		if self.use_map:
+			self.road_network = None
+			with open(self.config["node"]["road-network-path"], 'r') as f:
+				self.road_network = json.load(f)
 
 		# Initialize the topic subscribers
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
@@ -207,12 +209,12 @@ class DistanceExtractor (object):
 				distance = distances[index]
 				position = pointcloud_camera[:, index]
 
-				# filter out object that are not on the road
-				camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
-				position_map = camera_to_map @ position.T
-				if not self.point_on_road(position_map[0], position_map[1]):
-					continue
-				rospy.loginfo("On the road")
+				if self.use_map:
+					# filter out object that are not on the road
+					camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
+					position_map = camera_to_map @ position.T
+					if not self.point_on_road(position_map[0], position_map[1]):
+						continue
 
 				obj = Object()
 				obj.bbox = bbox

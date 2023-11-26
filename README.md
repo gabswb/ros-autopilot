@@ -15,13 +15,14 @@ Run at the root dir (the one with src/ build/ etc ...)  :
 ```sh
 roscore
 simulator # launch utac simulator
-rosrun perception perception_core.py src/config-utac.yml
+rosrun perception perception_core.py src/config-utac.yml 
     -v # open a opencv window with the forward camera perspective
     --no-publish # don't publish (for performance purpuse, might be useless)
     --lidar-projection # !! only for visualization purpuse 
     --log-objects # log published objects (yolo detection + its distance + its instance ID)
-     --time-statistics # time needed for the main operation (yolo detection time, distance extraction time, ...)
-     --yolov5 # use yolov5 model for better accuracy
+    --time-statistics # time needed for the main operation (yolo detection time, distance extraction time, ...)
+    --yolov5 # use yolov5 model for better accuracy
+    --use-map # use structural map to filer out object not on the road
 ```
 
 ### ONNX model generation
