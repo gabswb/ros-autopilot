@@ -16,6 +16,7 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from object_detector import ObjectDetector
 from distance_extractor_v2 import DistanceExtractor
+from vehicle_lights_detection import VehicleLightsDetection
 
 
 class Perception(object):
@@ -34,6 +35,7 @@ class Perception(object):
         # Detection module
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
         self.object_detector = ObjectDetector(config, yolov5, yolov8l, yolov8n)
+        self.vehicle_lights_detection = VehicleLightsDetection(config)
 
         # Publisher
         self.visualization_publisher = rospy.Publisher(config["node"]["perception-viz-topic"], Image, queue_size=10)
@@ -94,6 +96,9 @@ class Perception(object):
             obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
+
+        # detect blinkers or hazard lights
+        obj_list = self.vehicle_lights_detection.detect(img, obj_list)
 
         if self.visualize and len(obj_list) > 0:
             for obj in obj_list:
