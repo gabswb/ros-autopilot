@@ -46,7 +46,7 @@ class ObjectDetector(object):
             self.obj_id = 0
             self.kalman_filters = []
 
-        self.confidence_threshold = 0.2
+        self.confidence_threshold = 0.4
 
         rospy.loginfo("Object detector ready")	
 
