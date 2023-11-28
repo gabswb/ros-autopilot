@@ -5,13 +5,14 @@ import numpy as np
 import cv2
 import rospy
 import yaml
+from ultralytics import YOLO
 
 from perception.msg import ObjectBoundingBox
 
 MODEL_INPUT_WIDTH = MODEL_INPUT_HEIGHT = 416
 
 class ObjectDetector(object):
-    def __init__(self, config, yolov5):
+    def __init__(self, config, yolov5, yolov8l, yolov8n):
         self.config = config
         self.bbox_topic = self.config["node"]["object-bbox-topic"]
         self.yolov4_config_path = self.config["model"]["yolov4-config-path"]
@@ -20,23 +21,33 @@ class ObjectDetector(object):
         self.image_topic_width = self.config['node']['image-topic-width']
         self.image_topic_height = self.config['node']['image-topic-height']
         self.yolov5 = yolov5
+        self.yolov8l = yolov8l
+        self.yolov8n = yolov8n
+        self.yolov4 = not(self.yolov5 or self.yolov8l or self.yolov8n)
 
         # read pre-trained model and config file
         self.net = None
         if self.yolov5:
             self.net = cv2.dnn.readNetFromONNX(self.yolov5_onnx_path)
+        elif self.yolov8l:
+            self.net = YOLO("src/models/yolov8/yolov8l.pt")
+        elif self.yolov8n:
+            self.net = YOLO("src/models/yolov8/yolov8n.pt")
         else:
             self.net = cv2.dnn.readNet(self.yolov4_weights_path, self.yolov4_config_path)
-        self.output_layers = self.net.getUnconnectedOutLayersNames()
-        self.confidence_threshold = 0.45
-        self.nms_threshold = 0.45
 
-        # object association variables
-        self.confidence_matching = 300
-        self.kalman_filter_persistence = 2 # seconds
-        self.obj_id = 0
-        self.kalman_filters = []
-        
+        if self.yolov5 or self.yolov4:
+            # get output layer names
+            self.output_layers = self.net.getUnconnectedOutLayersNames()
+            self.nms_threshold = 0.45
+            # object association variables
+            self.confidence_matching = 300
+            self.kalman_filter_persistence = 2 # seconds
+            self.obj_id = 0
+            self.kalman_filters = []
+
+        self.confidence_threshold = 0.2
+
         rospy.loginfo("Object detector ready")	
 
     def kalman_init(self, measurement, h , w):
@@ -148,21 +159,36 @@ class ObjectDetector(object):
 
     def detect(self, img):
         """Detect objects in the image"""
-        # create input blob
-        blob = cv2.dnn.blobFromImage(img, 0.00392, (MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH), (0,0,0), True, crop=False)
-
-        # set input blob for the network
-        self.net.setInput(blob)
-        # run inference through the network and gather predictions from output layers
-        outputs = self.net.forward(self.output_layers)
-
-        boxes, class_ids, confidences = self.yolov5_output_to_bbox(outputs) if self.yolov5 else self.yolov4_output_to_bbox(outputs)     
-        indices = cv2.dnn.NMSBoxes(boxes, confidences, self.confidence_threshold, self.nms_threshold)
-        
-        # go through the detections remaining after nms and draw bounding box
         bbox_list = []
-        for i in indices:
-            bbox_list.append(self.create_bbox_msg(boxes[i], class_ids[i]))
+
+        if self.yolov8l or self.yolov8n:
+            # yolov8 processing
+            outputs = self.net.track(img, persist=True, verbose=False)
+            for box in outputs[0].boxes:
+                if box.conf > self.confidence_threshold:
+                    # rospy.loginfo(f"box:{box.xywh.int().cpu().tolist()}")
+                    # rospy.loginfo(f"cls:{box.cls.int().cpu().tolist()}")
+                    # if box.id is not None:
+                    #     rospy.loginfo(f"id:{box.id.int().cpu().tolist()}")
+                    # else:
+                    #     rospy.loginfo(f"id:None")
+                    xywh = box.xywh.int().cpu().tolist()[0]
+                    xywh[0] = xywh[0]-xywh[2]//2
+                    xywh[1] = xywh[1]-xywh[3]//2
+                    bbox_list.append(self.create_bbox_msg(xywh, box.cls.int().cpu().tolist()[0], box.id.int().cpu().tolist()[0] if box.id is not None else None))
+        else:
+            # yolov4 and yolov5 processing
+            blob = cv2.dnn.blobFromImage(img, 0.00392, (MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH), (0,0,0), True, crop=False)
+            # set input blob for the network
+            self.net.setInput(blob)
+            # run inference through the network and gather predictions from output layers
+            outputs = self.net.forward(self.output_layers)
+            boxes, class_ids, confidences = self.yolov5_output_to_bbox(outputs) if self.yolov5 else self.yolov4_output_to_bbox(outputs)     
+            indices = cv2.dnn.NMSBoxes(boxes, confidences, self.confidence_threshold, self.nms_threshold)
+            # go through the detections remaining after nms and draw bounding box
+            for i in indices:
+                bbox_list.append(self.create_bbox_msg(boxes[i], class_ids[i]))
+        
         return bbox_list
 
     def bbox_associations_and_predictions(self, bbox_list):
