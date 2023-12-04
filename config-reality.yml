@@ -6,10 +6,10 @@ node:
 
   perception-viz-topic: /perception_viz_topic
   object-bbox-topic: /object_bounding_box
-  image-topic: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]                              ⟶ trafficsigns, circulation
+  image-topic: /zoe2/sensors/cameras/front_top/image_raw   # Front camera topic                  :                       [Image]                              ⟶ trafficsigns, circulation
   camerainfo-topic: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]                         ⟶ trafficsigns, circulation
   velocity-topic: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
-  pointcloud-topic: /lidar                                 # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
+  pointcloud-topic: /zoe2/sensors/lidars/middle            # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
   trajectory-topic: /navigation/trajectory                 # Trajectory topic                    : circulation        ⟶ [circulation.msg.Trajectory]         ⟶ control 
   direction-topic: /navigation/direction                   # Direction for the next intersection : direction, control ⟶ [Uint8]                              ⟶ circulation
   object-info-topic: /perception/objects-info             # Traffic signs topic                 : trafficsigns       ⟶ [trafficsigns.msg.TrafficSignStatus] ⟶ circulation, control
@@ -35,7 +35,7 @@ node:
   road-network-path: src/road_network.json  
 
 model:
-  yolov4-class-names-path: src/models/yolov4-tiny/classes.names
+  detection-model-class-names-path: src/models/yolov4-tiny/classes.names
   yolov4-weights-path: src/models/yolov4-tiny/yolov4-tiny.weights
   yolov4-config-path: src/models/yolov4-tiny/yolov4-tiny.cfg
   yolov5n-onnx-model-path: src/models/yolov5n/YOLOv5n.onnx

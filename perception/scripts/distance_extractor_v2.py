@@ -31,6 +31,11 @@ class DistanceExtractor (object):
 			self.road_network = None
 			with open(self.config["node"]["road-network-path"], 'r') as f:
 				self.road_network = json.load(f)
+		else:
+			self.sensor_to_image = np.asarray([[1124.66943359375, 0.0, 505.781982421875],
+																				[0.0, 1124.6165771484375, 387.8110046386719],
+																				[0.0, 0.0, 1.0]]).reshape((3, 3))
+			self.distortion_parameter = 0.8803200125694275
 
 		# Initialize the topic subscribers
 		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
