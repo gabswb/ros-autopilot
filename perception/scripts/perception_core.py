@@ -42,7 +42,7 @@ class Perception(object):
         # visualization utils
         if self.visualize:
             self.classes = None
-            with open(config["model"]["yolov4-class-names-path"], 'r') as f:
+            with open(config["model"]["detection-model-class-names-path"], 'r') as f:
                 self.classes = [line.strip() for line in f.readlines()]
             self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
@@ -51,7 +51,17 @@ class Perception(object):
                             Subscriber(config["node"]["pointcloud-topic"], PointCloud2)], 10, 0.1, allow_headerless=True)
 
         tss.registerCallback(self.perception_callback)
-        rospy.loginfo("Perception ready")	
+
+        rospy.loginfo(f"Perception ready with parameters:")
+        rospy.loginfo(f"\tVisualize: {self.visualize}")
+        rospy.loginfo(f"\tPublish: {self.publish}")
+        rospy.loginfo(f"\tLidar projection: {self.lidar_projection}")
+        rospy.loginfo(f"\tLog objects: {self.log_objects}")
+        rospy.loginfo(f"\tTime statistics: {self.time_statistics}")
+        rospy.loginfo(f"\tYolov5: {self.yolov5}")
+        rospy.loginfo(f"\tYolov8l: {self.yolov8l}")
+        rospy.loginfo(f"\tYolov8n: {self.yolov8n}")
+        rospy.loginfo(f"\tUse map: {self.use_map}")	
 
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None):
         label = ""
