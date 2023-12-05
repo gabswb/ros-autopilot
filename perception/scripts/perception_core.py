@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-
-import cProfile
-
 import sys
-
 import yaml
 import rospy
 import numpy as np
 import cv2
 import time
 
-from perception.msg import ObjectList, ObjectBoundingBox
+from perception.msg import ObjectList
 from sensor_msgs.msg import Image, PointCloud2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
@@ -36,8 +32,8 @@ class Perception(object):
         self.object_detector = ObjectDetector(config, yolov5, yolov8l, yolov8n)
 
         # Publisher
-        self.visualization_publisher = rospy.Publisher(config["node"]["perception-viz-topic"], Image, queue_size=10)
-        self.object_info_publisher = rospy.Publisher(config["node"]["object-info-topic"], ObjectList, queue_size=10)
+        self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
+        self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
         if self.visualize:
@@ -47,8 +43,8 @@ class Perception(object):
             self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
 
         # Launch perception
-        tss = ApproximateTimeSynchronizer([Subscriber(config["node"]["image-topic"], Image),
-                            Subscriber(config["node"]["pointcloud-topic"], PointCloud2)], 10, 0.1, allow_headerless=True)
+        tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
+                            Subscriber(config["topic"]["pointcloud"], PointCloud2)], 10, 0.1, allow_headerless=True)
 
         tss.registerCallback(self.perception_callback)
 
@@ -65,7 +61,7 @@ class Perception(object):
 
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None):
         label = ""
-        if instance_id is not None:
+        if instance_id != 0:
             label = f"#{instance_id}: "
         label += str(self.classes[class_id])
         if d is not None:
@@ -79,7 +75,6 @@ class Perception(object):
             overall_start = time.time()
 
         img = np.frombuffer(img_data.data, dtype=np.uint8).reshape((img_data.height, img_data.width, 3))
-        # rospy.loginfo(f"Image shape: {img.shape}")
 
         # detect objects
         if self.time_statistics:

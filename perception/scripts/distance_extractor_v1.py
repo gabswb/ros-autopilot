@@ -23,7 +23,7 @@ DISTANCE_SCALE_MAX = 160
 class DistanceExtractor (object):
 	def __init__(self, config):
 		self.config = config
-		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
+		self.camerainfo_topic = self.config["node"]["forward-camera-info-topic"]
 
 		# Initialize the topic publisher
 		self.status_seq = 0

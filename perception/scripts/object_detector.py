@@ -14,12 +14,14 @@ MODEL_INPUT_WIDTH = MODEL_INPUT_HEIGHT = 416
 class ObjectDetector(object):
     def __init__(self, config, yolov5, yolov8l, yolov8n):
         self.config = config
-        self.bbox_topic = self.config["node"]["object-bbox-topic"]
+        self.bbox_topic = self.config["topic"]["object-bbox"]
         self.yolov4_config_path = self.config["model"]["yolov4-config-path"]
         self.yolov4_weights_path = self.config["model"]["yolov4-weights-path"]
         self.yolov5_onnx_path = self.config['model']['yolov5n-onnx-model-path']
-        self.image_topic_width = self.config['node']['image-topic-width']
-        self.image_topic_height = self.config['node']['image-topic-height']
+        self.yolov8n_path = self.config['model']['yolov8n-path']
+        self.yolov8l_path = self.config['model']['yolov8l-path']
+        self.image_topic_width = self.config['topic']['forward-camera-width']
+        self.image_topic_height = self.config['topic']['forward-camera-height']
         self.yolov5 = yolov5
         self.yolov8l = yolov8l
         self.yolov8n = yolov8n
@@ -30,9 +32,9 @@ class ObjectDetector(object):
         if self.yolov5:
             self.net = cv2.dnn.readNetFromONNX(self.yolov5_onnx_path)
         elif self.yolov8l:
-            self.net = YOLO("src/models/yolov8/yolov8l.pt")
+            self.net = YOLO(self.yolov8l_path)
         elif self.yolov8n:
-            self.net = YOLO("src/models/yolov8/yolov8n.pt")
+            self.net = YOLO(self.yolov8n_path)
         else:
             self.net = cv2.dnn.readNet(self.yolov4_weights_path, self.yolov4_config_path)
 
@@ -43,7 +45,7 @@ class ObjectDetector(object):
             # object association variables
             self.confidence_matching = 300
             self.kalman_filter_persistence = 2 # seconds
-            self.obj_id = 0
+            self.obj_id = 1
             self.kalman_filters = []
 
         self.confidence_threshold = 0.4
@@ -86,7 +88,7 @@ class ObjectDetector(object):
             'w': w,
         }
     
-    def create_bbox_msg(self, boxes, class_id, instance_id = None):
+    def create_bbox_msg(self, boxes, class_id, instance_id = 0):
         msg_bbox = ObjectBoundingBox()
         msg_bbox.x = boxes[0]
         msg_bbox.y = boxes[1]
@@ -175,7 +177,7 @@ class ObjectDetector(object):
                     xywh = box.xywh.int().cpu().tolist()[0]
                     xywh[0] = xywh[0]-xywh[2]//2
                     xywh[1] = xywh[1]-xywh[3]//2
-                    bbox_list.append(self.create_bbox_msg(xywh, box.cls.int().cpu().tolist()[0], box.id.int().cpu().tolist()[0] if box.id is not None else None))
+                    bbox_list.append(self.create_bbox_msg(xywh, box.cls.int().cpu().tolist()[0], box.id.int().cpu().tolist()[0] if box.id is not None else 0))
         else:
             # yolov4 and yolov5 processing
             blob = cv2.dnn.blobFromImage(img, 0.00392, (MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH), (0,0,0), True, crop=False)
