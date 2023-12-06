@@ -5,6 +5,7 @@ import rospy
 import numpy as np
 import cv2
 import time
+from cv_bridge import CvBridge
 
 from perception.msg import ObjectList
 from sensor_msgs.msg import Image, PointCloud2
@@ -15,21 +16,19 @@ from distance_extractor_v2 import DistanceExtractor
 
 
 class Perception(object):
-    def __init__(self, config, visualize = False, publish = True, lidar_projection = False, log_objects = False, time_statistics = False, yolov5 = False, yolov8l = False, yolov8n = False, use_map = False):
+    def __init__(self, config, visualize = False, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False):
         self.config = config
         self.visualize = visualize
-        self.publish = publish
+        self.rviz_visualize = rviz_visualize
         self.lidar_projection = lidar_projection
         self.log_objects = log_objects
         self.time_statistics = time_statistics
-        self.yolov5 = yolov5
         self.yolov8l = yolov8l
-        self.yolov8n = yolov8n
         self.use_map = use_map
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
-        self.object_detector = ObjectDetector(config, yolov5, yolov8l, yolov8n)
+        self.object_detector = ObjectDetector(config, yolov8l)
 
         # Publisher
         self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
@@ -41,6 +40,8 @@ class Perception(object):
             with open(config["model"]["detection-model-class-names-path"], 'r') as f:
                 self.classes = [line.strip() for line in f.readlines()]
             self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
+        if self.rviz_visualize:
+            self.cv_bridge = CvBridge()
 
         # Launch perception
         tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
@@ -50,13 +51,10 @@ class Perception(object):
 
         rospy.loginfo(f"Perception ready with parameters:")
         rospy.loginfo(f"\tVisualize: {self.visualize}")
-        rospy.loginfo(f"\tPublish: {self.publish}")
         rospy.loginfo(f"\tLidar projection: {self.lidar_projection}")
         rospy.loginfo(f"\tLog objects: {self.log_objects}")
         rospy.loginfo(f"\tTime statistics: {self.time_statistics}")
-        rospy.loginfo(f"\tYolov5: {self.yolov5}")
         rospy.loginfo(f"\tYolov8l: {self.yolov8l}")
-        rospy.loginfo(f"\tYolov8n: {self.yolov8n}")
         rospy.loginfo(f"\tUse map: {self.use_map}")	
 
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None):
@@ -83,14 +81,6 @@ class Perception(object):
         if self.time_statistics:
             rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
 
-        if not self.yolov8l and not self.yolov8n:
-            # track objects
-            if self.time_statistics:
-                start = time.time()
-            bbox_list = self.object_detector.bbox_associations_and_predictions(bbox_list)
-            if self.time_statistics:
-                rospy.loginfo(f"Tracking time: {time.time() - start:.2f}")
-
         # if objects detected -> get object position
         obj_list = []
         if len(bbox_list) > 0:
@@ -109,10 +99,13 @@ class Perception(object):
             cv2.imshow('perception visualization', img)
             cv2.waitKey(5)
         
-        if self.publish:
-            object_list = ObjectList()
-            object_list.object_list = obj_list
-            self.object_info_publisher.publish(obj_list)
+        if self.rviz_visualize:
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(img))
+        
+        object_list = ObjectList()
+        object_list.object_list = obj_list
+        self.object_info_publisher.publish(obj_list)
 
         if self.log_objects and len(obj_list) > 0:
             rospy.loginfo(obj_list)
@@ -124,12 +117,12 @@ class Perception(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8] [--yolov5] [--yolov8n] [--use-map]]")
+        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov5' in sys.argv,'--yolov8l' in sys.argv, '--yolov8n' in sys.argv,'--use-map' in sys.argv)
+        p = Perception(config,'-v' in sys.argv, '--rviz' in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov8l' in sys.argv, '--use-map' in sys.argv)
         rospy.spin()
 
