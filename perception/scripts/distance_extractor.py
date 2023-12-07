@@ -16,7 +16,12 @@ import transforms3d.quaternions as quaternions
 from sensor_msgs.msg import CameraInfo
 from perception.msg import Object, ObjectBoundingBox
 
+<<<<<<< HEAD
 import map_handler
+=======
+from vehicle_lights import HAS_LIGHT
+
+>>>>>>> b18fa3c7f236d87696caae3b14c41b95a3e6ed89
 
 
 DISTANCE_SCALE_MIN = 0
@@ -30,7 +35,7 @@ class DistanceExtractor (object):
 
 		if self.use_map:
 			self.road_network = None
-			with open(self.config["node"]["road-network-path"], 'r') as f:
+			with open(self.config["map"]["road-network-path"], 'r') as f:
 				self.road_network = json.load(f)
 		else:
 			self.sensor_to_image = np.asarray([[1124.66943359375, 0.0, 505.781982421875],
@@ -39,7 +44,7 @@ class DistanceExtractor (object):
 			self.distortion_parameter = 0.8803200125694275
 
 		# Initialize the topic subscribers
-		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
+		self.camerainfo_topic = self.config["topic"]["forward-camera-info"]
 		self.camerainfo_subscriber = rospy.Subscriber(self.camerainfo_topic, CameraInfo, self.callback_camerainfo)
 		
 		# Initialize the transformation listener
@@ -185,7 +190,7 @@ class DistanceExtractor (object):
 
 				if self.use_map:
 					# filter out object that are not on the road
-					camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
+					camera_to_map = self.get_transform(self.config["map"]["forward-camera-frame"], self.config["map"]["world-frame"])
 					position_map = camera_to_map @ position.T
 					if not self.map_handler.is_on_road((position_map[0], position_map[1])):
 						continue
@@ -196,9 +201,10 @@ class DistanceExtractor (object):
 				obj.x = position[0]
 				obj.y = position[1]
 				obj.z = position[2]
-
+				obj.left_blink = 0.0
+				obj.right_blink = 0.0
 				object_list.append(obj)
-				 
+
 		return object_list
 	
 

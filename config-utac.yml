@@ -1,18 +1,21 @@
+
 topic:
   # autopilot topic
   object-info: /perception/objects-info            
   object-bbox: /object_bounding_box
   perception-viz: /perception_viz_topic
-
+  
   # car topic
-  forward-camera: /zoe2/sensors/cameras/front_top/image_raw
+  forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
   forward-camera-info: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]      
   forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  
   forward-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
-  forward-rigth-camera: /forwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
-  forward-rigth-camera-info: /forwardCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
+  forward-right-camera: /forwardRightCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  forward-right-camera-info: /forwardRightCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
+  backward-camera: /backwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  backward-camera-info: /backwardCamera/camera_info  
   velocity: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
-  pointcloud: /zoe2/sensors/lidars/middle            # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
+  pointcloud: /lidar                                 # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
   speed: /ZOE2UTBM/control/speed                     # Vehicle speed control topic         : control            ⟶ [Float32]
   speed-cap: /ZOE2UTBM/control/max_speed             # Vehicle speed cap topic             : control            ⟶ [Float32]
   steering-angle: /ZOE2UTBM/control/steering_angle   # Vehicle steering topic              : control            ⟶ [Float32]

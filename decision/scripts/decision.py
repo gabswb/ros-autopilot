@@ -19,13 +19,10 @@ class Controller(object):
         self.config = config
 
         # Topics
-        self.velocity_topic = self.config["node"]["velocity-topic"]
-        self.trajectory_topic = self.config["node"]["trajectory-topic"]
-        self.speed_topic = self.config["node"]["speed-topic"]
-        self.speed_cap_topic = self.config["node"]["speed-cap-topic"]
-        self.steering_angle_topic = self.config["node"]["steering-angle-topic"]
-        self.object_info_topic = self.config["node"]["object-info-topic"]
-        self.direction_topic = self.config["node"]["direction-topic"]
+        self.velocity_topic = self.config["topic"]["velocity"]
+        self.speed_topic = self.config["topic"]["speed"]
+        self.speed_cap_topic = self.config["topic"]["speed-cap"]
+        self.object_info_topic = self.config["topic"]["object-info"]
         self.class_name_path = self.config["model"]["detection-model-class-names-path"]
 
         # Situation states
@@ -43,12 +40,9 @@ class Controller(object):
 
         # Initialize car topic subscribers
         self.velocity_subscriber = rospy.Subscriber(self.velocity_topic, TwistStamped, self.callback_velocity)
-        # self.trajectory_subscriber = rospy.Subscriber(self.trajectory_topic, Trajectory, self.callback_trajectory)
 
         # Initialize the car control publishers
         self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
-        self.steering_angle_publisher = rospy.Publisher(self.steering_angle_topic, Float32, queue_size=10)
-        self.direction_publisher = rospy.Publisher(self.direction_topic, UInt8, queue_size=1)
         rospy.loginfo("Decision ready")
 
 
