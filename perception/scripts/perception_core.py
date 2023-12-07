@@ -143,8 +143,8 @@ class Perception(object):
         
         if self.visualize:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            # cv2.imshow('perception visualization', img)
-            # cv2.waitKey(5)
+            cv2.imshow('perception visualization', img)
+            cv2.waitKey(5)
 
         if self.rviz_visualize:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
