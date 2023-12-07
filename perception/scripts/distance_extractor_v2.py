@@ -16,6 +16,7 @@ import transforms3d.quaternions as quaternions
 from sensor_msgs.msg import CameraInfo
 from perception.msg import Object, ObjectBoundingBox
 
+import map_handler
 
 
 DISTANCE_SCALE_MIN = 0
@@ -44,6 +45,8 @@ class DistanceExtractor (object):
 		# Initialize the transformation listener
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+
+		self.map_handler = map_handler.MapHandler(self.config["node"]["road-network-path"])
 
 		rospy.loginfo("DistanceExtractor initialized")
 
@@ -112,40 +115,6 @@ class DistanceExtractor (object):
 		bbox_cropped.h = bbox.h - y_crop*2
 		bbox_cropped.class_id = bbox.class_id
 		return bbox_cropped
-
-	def point_on_road(self, x, y):
-		'''Return true if point (x,y) is on the road
-			-x,y coordinates of the point in the map frame
-		'''
-		for segment in self.road_network:
-			geometry = segment["geometry"]
-			px_values = [point["px"] for point in geometry]
-			py_values = [point["py"] for point in geometry]
-			tx_values = [point["tx"] for point in geometry]
-			ty_values = [point["ty"] for point in geometry]
-			width = segment["geometry"][0]["width"]
-
-			# Calculate perpendicular vectors to represent the road boundaries
-			dx = np.array([-ty for ty in ty_values])
-			dy = np.array([tx for tx in tx_values])
-
-			length = np.sqrt(dx**2 + dy**2)
-			dx /= length
-			dy /= length
-
-			# Calculate road boundaries
-			left_boundary_x = px_values - (width / 2) * dx
-			left_boundary_y = py_values - (width / 2) * dy
-			right_boundary_x = px_values + (width / 2) * dx
-			right_boundary_y = py_values + (width / 2) * dy
-
-			# Check if the point is within the bounding box of the road segment
-			for i in range(len(px_values) - 1):
-				if min(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) <= x <= max(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) and \
-				min(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]) <= y <= max(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]):
-					return True
-
-		return False
 
 	def get_objects_position(self, image_data, pointcloud_data, bbox_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera"""
@@ -218,7 +187,7 @@ class DistanceExtractor (object):
 					# filter out object that are not on the road
 					camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
 					position_map = camera_to_map @ position.T
-					if not self.point_on_road(position_map[0], position_map[1]):
+					if not self.map_handler.is_on_road((position_map[0], position_map[1])):
 						continue
 
 				obj = Object()
