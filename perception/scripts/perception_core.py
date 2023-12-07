@@ -63,7 +63,7 @@ class Perception(object):
         rospy.loginfo(f"\tUse map: {self.use_map}")	
         rospy.loginfo(f"\tDetect light: {self.detect_lights}")
 
-    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, left_blink = 0, right_blink = 0):
+    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, left_blink = False, right_blink = False):
         label = ""
         if instance_id != 0:
             label = f"#{instance_id}: "
@@ -91,10 +91,10 @@ class Perception(object):
 
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
-        if left_blink > 0:
+        if left_blink:
             cv2.putText(img, "L Blink", (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        if right_blink > 0:
+        if right_blink:
             cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     def perception_callback(self, img_data, point_cloud_data):
