@@ -1,8 +1,13 @@
 import cv2 as cv
 import numpy as np
 import rospy
+from math import sqrt
 
 HAS_LIGHT = (2, 5, 6, 7, 8)
+
+BLINK_HEIGHT = [0.3, 0.55]
+LEFT_BLINK = [0, 0.3]
+RIGHT_BLINK = [0.7, 1]
 
 
 def check_vehicle_lights_on(previous_img, previous_bbox, current_image, current_bbox):
@@ -17,8 +22,9 @@ def check_vehicle_lights_on(previous_img, previous_bbox, current_image, current_
                                             prev_bbox.instance_id == bbox.instance_id)]
 
             if len(corresponding_previous_bbox) >= 1:
-                dst_corners = get_bbox_corners(bbox)
-                src_corners = get_bbox_corners(corresponding_previous_bbox[0])
+                dst_corners, current_diagonal = get_bbox_corners(bbox)
+                src_corners, previous_diagonal = get_bbox_corners(corresponding_previous_bbox[0])
+
 
                 M = cv.getPerspectiveTransform(src_corners, dst_corners)
 
@@ -31,15 +37,16 @@ def check_vehicle_lights_on(previous_img, previous_bbox, current_image, current_
                 x1, y1, x2, y2 = np.int32((dst_corners[0][0], dst_corners[0][1],
                                           dst_corners[2][0], dst_corners[2][1]))
 
-                rospy.loginfo(str((x1, x2, y1, y2)))
-
                 image_to_analyse = cv.absdiff(current_isolate_bbox[y1:y2, x1:x2], previous_isolate_bbox[y1:y2, x1:x2])
                 image_hsv = cv.cvtColor(image_to_analyse, cv.COLOR_RGB2HSV)
-                th_image = cv.inRange(image_hsv, (0, 43, 150), (255, 255, 255))
+                th_image = cv.inRange(image_hsv, (0, 43, 140), (255, 255, 255))
 
-                light_blink[bbox.instance_id] = check_light_blink(th_image)
+                if 0.96 * previous_diagonal <= current_diagonal <= 1.04 * previous_diagonal:
+                    light_blink[bbox.instance_id] = check_light_blink(th_image)
+                else:
+                    light_blink[bbox.instance_id] = [False, False]
 
-                new_image[y1:y2, x1:x2] = th_image
+                    new_image[y1:y2, x1:x2] = th_image
 
     return light_blink, new_image
 
@@ -62,13 +69,36 @@ def get_bbox_corners(bbox):
     x_plus_w = x + bbox.w
     y_plus_h = y + bbox.h
 
-    corners = np.float32([(x, y), (x_plus_w, y), (x_plus_w, y_plus_h), (x, y_plus_h)])
+    l_x = x_plus_w - x
+    l_y = y_plus_h - y
+
+    diagonal = sqrt(l_x ** 2 + l_y ** 2)
+
+    corners = np.float32([(x, y), (x_plus_w, y), (x_plus_w, y_plus_h), (x, y_plus_h)]), diagonal
 
     return corners
 
 
 def check_light_blink(img):
-    if cv.countNonZero(img) == 0:
-        return False
+    y_min = int(img.shape[0] * BLINK_HEIGHT[0])
+    y_max = int(img.shape[0] * BLINK_HEIGHT[1])
+
+    x_min_left = int(img.shape[1] * LEFT_BLINK[0])
+    x_max_left = int(img.shape[1] * LEFT_BLINK[1])
+
+    x_min_right = int(img.shape[1] * RIGHT_BLINK[0])
+    x_max_right = int(img.shape[1] * RIGHT_BLINK[1])
+
+    blinks_on = []
+
+    if cv.countNonZero(img[y_min:y_max, x_min_left:x_max_left]) == 0:
+        blinks_on.append(False)
     else:
-        return True
+        blinks_on.append(True)
+
+    if cv.countNonZero(img[y_min:y_max, x_min_right:x_max_right]) == 0:
+        blinks_on.append(False)
+    else:
+        blinks_on.append(True)
+
+    return blinks_on

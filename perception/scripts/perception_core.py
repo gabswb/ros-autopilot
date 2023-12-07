@@ -13,7 +13,12 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from object_detector import ObjectDetector
 from distance_extractor_v2 import DistanceExtractor
-from vehicle_lights import check_vehicle_lights_on
+from vehicle_lights import check_vehicle_lights_on, BLINK_HEIGHT, RIGHT_BLINK, LEFT_BLINK, HAS_LIGHT
+
+BLINK_TO_TURN_ON = 2
+BLINK_TO_TURN_OFF = 6
+
+DISPLAY_LIGHT_BBOX = True
 
 
 class Perception(object):
@@ -62,7 +67,7 @@ class Perception(object):
         rospy.loginfo(f"\tYolov8l: {self.yolov8l}")
         rospy.loginfo(f"\tUse map: {self.use_map}")	
 
-    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, light_blink = False):
+    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, light_blink = None):
         label = ""
         if instance_id != 0:
             label = f"#{instance_id}: "
@@ -71,9 +76,29 @@ class Perception(object):
             label += f": {d:.2f}m"
         color = self.COLORS[class_id]
         cv2.rectangle(img, (x,y), (x_plus_w,y_plus_h), color, 2)
+
+        if class_id in HAS_LIGHT and DISPLAY_LIGHT_BBOX:
+            l_x = x_plus_w - x
+            l_y = y_plus_h - y
+
+            y_min = y + int(l_y * BLINK_HEIGHT[0])
+            y_max = y + int(l_y * BLINK_HEIGHT[1])
+
+            x_min_left = x + int(l_x * LEFT_BLINK[0])
+            x_max_left = x + int(l_x * LEFT_BLINK[1])
+
+            x_min_right = x + int(l_x * RIGHT_BLINK[0])
+            x_max_right = x + int(l_x * RIGHT_BLINK[1])
+
+            cv2.rectangle(img, (x_min_left,y_min), (x_max_left,y_max), (255, 0, 0), 1)
+            cv2.rectangle(img, (x_min_right,y_min), (x_max_right,y_max), (255, 0, 0), 1)
+
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        if light_blink:
-            cv2.putText(img, "Blink", (x - 10, y_plus_h + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        if light_blink["left_blink"]:
+            cv2.putText(img, "L Blink", (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        if light_blink["right_blink"]:
+            cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     def perception_callback(self, img_data, point_cloud_data):
         if self.time_statistics:
@@ -90,7 +115,7 @@ class Perception(object):
         th_image = None
         if bbox_list is not None and self.previous_image is not None:
             current_blink_dict, th_image = check_vehicle_lights_on(self.previous_image, self.previous_bbox_list, img, bbox_list)
-            rospy.loginfo(current_blink_dict)
+            self.update_blink_history(current_blink_dict)
 
         self.previous_image = img.copy()
         self.previous_bbox_list = bbox_list
@@ -103,16 +128,18 @@ class Perception(object):
         if len(bbox_list) > 0:
             if self.time_statistics:
                 start = time.time()
-            obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)
+            obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list, self.blink_dict_history)
+            rospy.loginfo(obj_list)
+
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
 
         if (self.visualize or self.rviz_visualize) and len(obj_list) > 0:
             for obj in obj_list:
-                if obj.bbox.instance_id in current_blink_dict:
+                if obj.bbox.instance_id in self.blink_dict_history:
                     self.draw_bounding_box(img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
                                            obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id,
-                                           current_blink_dict[obj.bbox.instance_id])
+                                           self.blink_dict_history[obj.bbox.instance_id])
         
         if self.visualize:
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -134,19 +161,51 @@ class Perception(object):
             rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
 
     def update_blink_history(self, current_blink):
-        for instance_id in self.blink_dict_history:
+        for instance_id in list(self.blink_dict_history):
             if instance_id in current_blink:
-                if current_blink[instance_id]:
-                    pass
+                if current_blink[instance_id][0]:
+                    if not self.blink_dict_history[instance_id]["left_blink"]:
+                        self.blink_dict_history[instance_id]["count_left"] += 1
+                        if self.blink_dict_history[instance_id]["count_left"] >= BLINK_TO_TURN_ON:
+                            self.blink_dict_history[instance_id]["left_blink"] = True
+                            self.blink_dict_history[instance_id]["count_left"] = 0
+                    else:
+                        self.blink_dict_history[instance_id]["count_left"] = 0
+
+                if current_blink[instance_id][1]:
+                    if not self.blink_dict_history[instance_id]["right_blink"]:
+                        self.blink_dict_history[instance_id]["count_right"] += 1
+                        if self.blink_dict_history[instance_id]["count_right"] >= BLINK_TO_TURN_ON:
+                            self.blink_dict_history[instance_id]["right_blink"] = True
+                            self.blink_dict_history[instance_id]["count_right"] = 0
+                    else:
+                        self.blink_dict_history[instance_id]["count_right"] = 0
                 else:
-                    pass
+                    if self.blink_dict_history[instance_id]["left_blink"]:
+                        self.blink_dict_history[instance_id]["count_left"] += 1
+                        if self.blink_dict_history[instance_id]["count_left"] >= BLINK_TO_TURN_OFF:
+                            self.blink_dict_history[instance_id]["left_blink"] = False
+                            self.blink_dict_history[instance_id]["count_left"] = 0
+                    else:
+                        self.blink_dict_history[instance_id]["count_left"] = 0
+
+                    if self.blink_dict_history[instance_id]["right_blink"]:
+                        self.blink_dict_history[instance_id]["count_right"] += 1
+                        if self.blink_dict_history[instance_id]["count_right"] >= BLINK_TO_TURN_OFF:
+                            self.blink_dict_history[instance_id]["right_blink"] = False
+                            self.blink_dict_history[instance_id]["count_right"] = 0
+                    else:
+                        self.blink_dict_history[instance_id]["count_right"] = 0
                 current_blink.pop(instance_id)
             else:
-                pass
+                self.blink_dict_history.pop(instance_id)
 
         for id_instance in current_blink:
-            pass
-
+            self.blink_dict_history[id_instance] = {"left_blink": False, "right_blink": False, "count_left": 0, "count_right": 0}
+            if current_blink[id_instance][0]:
+                self.blink_dict_history[id_instance]["count_left"] += 1
+            if current_blink[id_instance][1]:
+                self.blink_dict_history[id_instance]["count_right"] += 1
 
 
 
