@@ -29,7 +29,7 @@ class DistanceExtractor (object):
 
 		if self.use_map:
 			self.road_network = None
-			with open(self.config["node"]["road-network-path"], 'r') as f:
+			with open(self.config["map"]["road-network-path"], 'r') as f:
 				self.road_network = json.load(f)
 		else:
 			self.sensor_to_image = np.asarray([[1124.66943359375, 0.0, 505.781982421875],
@@ -38,7 +38,7 @@ class DistanceExtractor (object):
 			self.distortion_parameter = 0.8803200125694275
 
 		# Initialize the topic subscribers
-		self.camerainfo_topic = self.config["node"]["camerainfo-topic"]
+		self.camerainfo_topic = self.config["topic"]["forward-camera-info"]
 		self.camerainfo_subscriber = rospy.Subscriber(self.camerainfo_topic, CameraInfo, self.callback_camerainfo)
 		
 		# Initialize the transformation listener
@@ -216,7 +216,7 @@ class DistanceExtractor (object):
 
 				if self.use_map:
 					# filter out object that are not on the road
-					camera_to_map = self.get_transform(self.config["node"]["forward-camera-frame"], self.config["node"]["world-frame"])
+					camera_to_map = self.get_transform(self.config["map"]["forward-camera-frame"], self.config["map"]["world-frame"])
 					position_map = camera_to_map @ position.T
 					if not self.point_on_road(position_map[0], position_map[1]):
 						continue

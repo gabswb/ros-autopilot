@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
-
-import cProfile
-
 import sys
-
 import yaml
 import rospy
 import numpy as np
 import cv2
-from cv_bridge import CvBridge
 import time
+from cv_bridge import CvBridge
 
-from perception.msg import ObjectList, ObjectBoundingBox
+from perception.msg import ObjectList
 from sensor_msgs.msg import Image, PointCloud2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
@@ -21,59 +17,54 @@ from vehicle_lights import check_vehicle_lights_on
 
 
 class Perception(object):
-    def __init__(self, config, visualize = False, publish = True, lidar_projection = False, log_objects = False, time_statistics = False, yolov5 = False, yolov8l = False, yolov8n = False, use_map = False, warnings_visualize = False):
+    def __init__(self, config, visualize = False, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False):
         self.config = config
         self.visualize = visualize
-        self.publish = publish
+        self.rviz_visualize = rviz_visualize
         self.lidar_projection = lidar_projection
         self.log_objects = log_objects
         self.time_statistics = time_statistics
-        self.yolov5 = yolov5
         self.yolov8l = yolov8l
-        self.yolov8n = yolov8n
         self.use_map = use_map
-        self.warnings_visualize = warnings_visualize
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
-        self.object_detector = ObjectDetector(config, yolov5, yolov8l, yolov8n)
+        self.object_detector = ObjectDetector(config, yolov8l)
 
         self.previous_bbox_list = None
         self.previous_image = None
         self.blink_dict_history = {}
 
         # Publisher
-        self.visualization_publisher = rospy.Publisher(config["node"]["perception-viz-topic"], Image, queue_size=10)
-        self.object_info_publisher = rospy.Publisher(config["node"]["object-info-topic"], ObjectList, queue_size=10)
+        self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
+        self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
-        if self.visualize:
+        if self.visualize or self.rviz_visualize:
             self.classes = None
             with open(config["model"]["detection-model-class-names-path"], 'r') as f:
                 self.classes = [line.strip() for line in f.readlines()]
             self.COLORS = np.random.uniform(0, 255, size=(len(self.classes), 3))
+        if self.rviz_visualize:
+            self.cv_bridge = CvBridge()
 
         # Launch perception
-        tss = ApproximateTimeSynchronizer([Subscriber(config["node"]["image-topic"], Image),
-                            Subscriber(config["node"]["pointcloud-topic"], PointCloud2)], 10, 0.1, allow_headerless=True)
+        tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
+                            Subscriber(config["topic"]["pointcloud"], PointCloud2)], 10, 0.1, allow_headerless=True)
 
         tss.registerCallback(self.perception_callback)
 
         rospy.loginfo(f"Perception ready with parameters:")
         rospy.loginfo(f"\tVisualize: {self.visualize}")
-        rospy.loginfo(f"\tPublish: {self.publish}")
         rospy.loginfo(f"\tLidar projection: {self.lidar_projection}")
         rospy.loginfo(f"\tLog objects: {self.log_objects}")
         rospy.loginfo(f"\tTime statistics: {self.time_statistics}")
-        rospy.loginfo(f"\tYolov5: {self.yolov5}")
         rospy.loginfo(f"\tYolov8l: {self.yolov8l}")
-        rospy.loginfo(f"\tYolov8n: {self.yolov8n}")
         rospy.loginfo(f"\tUse map: {self.use_map}")	
-        rospy.loginfo(f"\tWarnings visualize: {self.warnings_visualize}")
 
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, light_blink = False):
         label = ""
-        if instance_id is not None:
+        if instance_id != 0:
             label = f"#{instance_id}: "
         label += str(self.classes[class_id])
         if d is not None:
@@ -89,7 +80,6 @@ class Perception(object):
             overall_start = time.time()
 
         img = np.frombuffer(img_data.data, dtype=np.uint8).reshape((img_data.height, img_data.width, 3))
-        # rospy.loginfo(f"Image shape: {img.shape}")
 
         # detect objects
         if self.time_statistics:
@@ -108,14 +98,6 @@ class Perception(object):
         if self.time_statistics:
             rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
 
-        if not self.yolov8l and not self.yolov8n:
-            # track objects
-            if self.time_statistics:
-                start = time.time()
-            bbox_list = self.object_detector.bbox_associations_and_predictions(bbox_list)
-            if self.time_statistics:
-                rospy.loginfo(f"Tracking time: {time.time() - start:.2f}")
-
         # if objects detected -> get object position
         obj_list = []
         if len(bbox_list) > 0:
@@ -125,7 +107,7 @@ class Perception(object):
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
 
-        if self.visualize and len(obj_list) > 0:
+        if (self.visualize or self.rviz_visualize) and len(obj_list) > 0:
             for obj in obj_list:
                 if obj.bbox.instance_id in current_blink_dict:
                     self.draw_bounding_box(img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
@@ -136,14 +118,14 @@ class Perception(object):
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
             # cv2.imshow('perception visualization', img)
             # cv2.waitKey(5)
+
+        if self.rviz_visualize:
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(img))
         
-        if self.publish and th_image is not None:
-            object_list = ObjectList()
-            object_list.object_list = obj_list
-            # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            image_message = CvBridge().cv2_to_imgmsg(img, encoding="bgr8")
-            self.visualization_publisher.publish(image_message)
-            self.object_info_publisher.publish(obj_list)
+        object_list = ObjectList()
+        object_list.object_list = obj_list
+        self.object_info_publisher.publish(obj_list)
 
         if self.log_objects and len(obj_list) > 0:
             rospy.loginfo(obj_list)
@@ -170,12 +152,12 @@ class Perception(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--no-publish] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8] [--yolov5] [--yolov8n] [--use-map]]")
+        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-        p = Perception(config, '-v' in sys.argv, '--no-publish' not in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov5' in sys.argv,'--yolov8l' in sys.argv, '--yolov8n' in sys.argv,'--use-map' in sys.argv)
+        p = Perception(config,'-v' in sys.argv, '--rviz' in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov8l' in sys.argv, '--use-map' in sys.argv)
         rospy.spin()
 
