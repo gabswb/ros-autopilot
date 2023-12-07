@@ -17,7 +17,7 @@ class VehicleLightsDetector(object):
         self.previous_obj_list = None
         self.previous_image = None
         self.blink_dict_history = {}
-        rospy.loginfo("DistanceExtractor initialized")		
+        rospy.loginfo("Vehicle light detector initialized")		
 
     def check_vehicle_lights_on(self, previous_img, previous_obj, current_image, current_obj):
         new_image = np.zeros((current_image.shape[0], current_image.shape[1]), dtype=np.uint8)

@@ -34,6 +34,7 @@ class Perception(object):
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
         self.object_detector = ObjectDetector(config, yolov8l)
         self.vehicle_light_detector = VehicleLightsDetector()
+        self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
         self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
@@ -50,12 +51,16 @@ class Perception(object):
 
         # Launch perception
         tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
+                                           Subscriber(config["topic"]["forward-left-camera"], Image),
+                                           Subscriber(config["topic"]["forward-right-camera"], Image),
+                                           Subscriber(config["topic"]["backward-camera"], Image),
                             Subscriber(config["topic"]["pointcloud"], PointCloud2)], 10, 0.1, allow_headerless=True)
 
         tss.registerCallback(self.perception_callback)
 
         rospy.loginfo(f"Perception ready with parameters:")
-        rospy.loginfo(f"\tVisualize: {self.visualize}")
+        rospy.loginfo(f"\tOpencv visualize: {self.visualize}")
+        rospy.loginfo(f"\tRViz visualize: {self.rviz_visualize}")
         rospy.loginfo(f"\tLidar projection: {self.lidar_projection}")
         rospy.loginfo(f"\tLog objects: {self.log_objects}")
         rospy.loginfo(f"\tTime statistics: {self.time_statistics}")
@@ -97,18 +102,16 @@ class Perception(object):
         if right_blink > 0:
             cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-    def perception_callback(self, img_data, point_cloud_data):
+    def perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, point_cloud_data):
         if self.time_statistics:
             overall_start = time.time()
 
-        img = np.frombuffer(img_data.data, dtype=np.uint8).reshape((img_data.height, img_data.width, 3))
+        forward_img = np.frombuffer(forward_img_data.data, dtype=np.uint8).reshape((forward_img_data.height, forward_img_data.width, 3))
 
         # detect objects
         if self.time_statistics:
             start = time.time()
-
-        bbox_list = self.object_detector.detect(img)
-
+        bbox_list = self.object_detector.detect(forward_img)
         if self.time_statistics:
             rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
 
@@ -117,8 +120,7 @@ class Perception(object):
         if len(bbox_list) > 0:
             if self.time_statistics:
                 start = time.time()
-            obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list)
-
+            obj_list = self.distance_extractor.get_objects_position(forward_img_data, point_cloud_data, bbox_list)
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
 
@@ -126,23 +128,23 @@ class Perception(object):
         if self.detect_lights:
             if self.time_statistics:
                 start = time.time()
-            obj_list = self.vehicle_light_detector.check_lights(img, obj_list)
+            obj_list = self.vehicle_light_detector.check_lights(forward_img, obj_list)
             if self.time_statistics:
                 rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")        
 
         if (self.visualize or self.rviz_visualize) and len(obj_list) > 0:
             for obj in obj_list:
-                self.draw_bounding_box(img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
+                self.draw_bounding_box(forward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
                                         obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
         
         if self.visualize:
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            cv2.imshow('perception visualization', img)
+            forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
+            cv2.imshow('perception visualization', forward_img)
             cv2.waitKey(5)
 
         if self.rviz_visualize:
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(img))
+            forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
+            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
         
         object_list = ObjectList()
         object_list.object_list = obj_list
