@@ -12,9 +12,10 @@ from perception.msg import ObjectBoundingBox
 MODEL_INPUT_WIDTH = MODEL_INPUT_HEIGHT = 416
 
 class ObjectDetector(object):
-    def __init__(self, config, yolov8l):
+    def __init__(self, config, yolov8l, track = True):
         self.config = config
         self.yolov8l = yolov8l
+        self.track = track
         
         self.bbox_topic = self.config["topic"]["object-bbox"]
         self.yolov8n_path = self.config['model']['yolov8n-path']
@@ -47,7 +48,7 @@ class ObjectDetector(object):
         bbox_list = []
 
         # yolov8 processing
-        outputs = self.net.track(img, persist=True, verbose=False)
+        outputs = self.net.track(img, persist=self.track, verbose=False)
         for box in outputs[0].boxes:
             if box.conf > self.confidence_threshold:
                 xywh = box.xywh.int().cpu().tolist()[0]
