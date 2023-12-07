@@ -16,12 +16,7 @@ import transforms3d.quaternions as quaternions
 from sensor_msgs.msg import CameraInfo
 from perception.msg import Object, ObjectBoundingBox
 
-<<<<<<< HEAD
 import map_handler
-=======
-from vehicle_lights import HAS_LIGHT
-
->>>>>>> b18fa3c7f236d87696caae3b14c41b95a3e6ed89
 
 
 DISTANCE_SCALE_MIN = 0
@@ -34,9 +29,7 @@ class DistanceExtractor (object):
 		self.use_map = use_map
 
 		if self.use_map:
-			self.road_network = None
-			with open(self.config["map"]["road-network-path"], 'r') as f:
-				self.road_network = json.load(f)
+			self.map_handler = map_handler.MapHandler(self.config["node"]["road-network-path"])
 		else:
 			self.sensor_to_image = np.asarray([[1124.66943359375, 0.0, 505.781982421875],
 																				[0.0, 1124.6165771484375, 387.8110046386719],
@@ -51,7 +44,6 @@ class DistanceExtractor (object):
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
-		self.map_handler = map_handler.MapHandler(self.config["node"]["road-network-path"])
 
 		rospy.loginfo("DistanceExtractor initialized")
 

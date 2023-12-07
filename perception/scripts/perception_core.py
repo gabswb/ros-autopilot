@@ -12,7 +12,7 @@ from sensor_msgs.msg import Image, PointCloud2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from object_detector import ObjectDetector
-from distance_extractor_v2 import DistanceExtractor
+from distance_extractor import DistanceExtractor
 from vehicle_lights import VehicleLightsDetector, BLINK_HEIGHT, RIGHT_BLINK, LEFT_BLINK, HAS_LIGHT
 
 DISPLAY_LIGHT_BBOX = True
