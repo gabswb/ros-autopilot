@@ -149,7 +149,7 @@ class DistanceExtractor (object):
 
 		return False
 
-	def get_objects_position(self, image_data, pointcloud_data, bbox_list, blink_dict):
+	def get_objects_position(self, image_data, pointcloud_data, bbox_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera"""
 
 		object_list = []		
@@ -229,13 +229,8 @@ class DistanceExtractor (object):
 				obj.x = position[0]
 				obj.y = position[1]
 				obj.z = position[2]
-				if bbox.class_id in HAS_LIGHT and bbox.instance_id in blink_dict:
-					obj.left_blink = blink_dict[bbox.instance_id]["left_blink"]
-					obj.right_blink = blink_dict[bbox.instance_id]["right_blink"]
-				else:
-					obj.left_blink = 0.0
-					obj.right_blink = 0.0
-
+				obj.left_blink = 0.0
+				obj.right_blink = 0.0
 				object_list.append(obj)
 
 		return object_list

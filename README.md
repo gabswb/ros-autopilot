@@ -23,6 +23,7 @@ rosrun perception perception_core.py src/config-utac.yml
     --time-statistics # time needed for the main operation (yolo detection time, distance extraction time, ...)
     --yolov8l # use yolov8l model for better accuracy
     --use-map # use structural map to filer out object not on the road
+    --no-lights # disable lights detection (for better performance)
 ```
 
 ### ONNX model generation
