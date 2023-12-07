@@ -235,7 +235,6 @@ class DistanceExtractor (object):
 				else:
 					obj.left_blink = 0.0
 					obj.right_blink = 0.0
-				rospy.loginfo(str(obj))
 
 				object_list.append(obj)
 

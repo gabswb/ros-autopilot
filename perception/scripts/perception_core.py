@@ -112,7 +112,6 @@ class Perception(object):
 
         bbox_list = self.object_detector.detect(img)
         current_blink_dict = {}
-        th_image = None
         if bbox_list is not None and self.previous_image is not None:
             current_blink_dict, th_image = check_vehicle_lights_on(self.previous_image, self.previous_bbox_list, img, bbox_list)
             self.update_blink_history(current_blink_dict)
@@ -129,7 +128,6 @@ class Perception(object):
             if self.time_statistics:
                 start = time.time()
             obj_list = self.distance_extractor.get_objects_position(img_data, point_cloud_data, bbox_list, self.blink_dict_history)
-            rospy.loginfo(obj_list)
 
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
