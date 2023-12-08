@@ -17,7 +17,6 @@ from vehicle_lights import VehicleLightsDetector, BLINK_HEIGHT, RIGHT_BLINK, LEF
 
 DISPLAY_LIGHT_BBOX = True
 
-
 class Perception(object):
     def __init__(self, config, visualize = False, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False, detect_lights = True):
         self.config = config
@@ -29,6 +28,8 @@ class Perception(object):
         self.yolov8l = yolov8l
         self.use_map = use_map
         self.detect_lights = detect_lights
+        
+        self.reference_frame = config["map"]["reference-frame"]
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
@@ -37,7 +38,7 @@ class Perception(object):
         self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
-        self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
+        self.bbox_viz_publisher = rospy.Publisher(config["topic"]["bbox-viz"], Image, queue_size=10)
         self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
@@ -120,7 +121,8 @@ class Perception(object):
         if len(bbox_list) > 0:
             if self.time_statistics:
                 start = time.time()
-            obj_list = self.distance_extractor.get_objects_position(forward_img_data, point_cloud_data, bbox_list)
+            image_bbox_data = [(forward_img_data, bbox_list)]
+            obj_list = self.distance_extractor.get_objects_position(image_bbox_data, point_cloud_data, self.reference_frame)
             if self.time_statistics:
                 rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
 
@@ -144,7 +146,7 @@ class Perception(object):
 
         if self.rviz_visualize:
             forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
+            self.bbox_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
         
         object_list = ObjectList()
         object_list.object_list = obj_list
