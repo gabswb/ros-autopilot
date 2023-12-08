@@ -20,6 +20,7 @@ class Controller(object):
 
         # Topics
         self.velocity_topic = self.config["topic"]["velocity"]
+        self.steering_angle = self.config["topic"]["steering-angle"]
         self.speed_topic = self.config["topic"]["speed"]
         self.speed_cap_topic = self.config["topic"]["speed-cap"]
         self.object_info_topic = self.config["topic"]["object-info"]
@@ -29,6 +30,11 @@ class Controller(object):
         self.real_speed = None
         self.real_angular_speed = None
         self.object_list = []
+
+        # Overtaking states
+        self.overtaking = False
+        self.start_overtaking_time = None
+        self.has_overtaken = False
 
         # Get classes names
         self.classes = None
@@ -43,6 +49,7 @@ class Controller(object):
 
         # Initialize the car control publishers
         self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
+        self.steering_angle_publisher = rospy.Publisher(self.steering_angle, Float32, queue_size=10)
         rospy.loginfo("Decision ready")
 
 
@@ -59,9 +66,43 @@ class Controller(object):
         velocity_y = velocity_msg.linear.y
         self.real_speed = np.linalg.norm([velocity_x, velocity_y])
         self.real_angular_speed = velocity_msg.angular.z
+    
+    def overtake(self, side="left"):
+        if side != "left" and side != "right":
+            rospy.loginfo("Invalid side parameter for overtaking")
+            return
+        direction = -1 if side == "left"  else 1 
+
+        if not self.overtaking:
+            rospy.loginfo("Start overtaking")
+            self.start_overtaking_time = rospy.get_time()
+            self.overtaking = True
+        else:
+            gap = rospy.get_time() - self.start_overtaking_time
+            rospy.loginfo(f"Gap: {gap:.2f}")
+            self.speed_publisher.publish(2)
+            if gap < 2:
+                self.steering_angle_publisher.publish(0)
+            elif gap < 5:
+                self.steering_angle_publisher.publish(direction*20)
+            elif gap < 7:
+                self.steering_angle_publisher.publish(-direction*20)
+            elif gap < 10:
+                self.steering_angle_publisher.publish(0)
+            elif gap < 12:
+                self.steering_angle_publisher.publish(-direction*20)
+            elif gap < 15:
+                self.steering_angle_publisher.publish(direction*20)
+            elif gap < 17:
+                self.steering_angle_publisher.publish(0)
+            else:
+                self.overtaking = False
+                rospy.loginfo("Finished overtaking")
+        
 
     def publish_control_inputs(self, ):
         """Publish the control inputs to the car"""
+        # STOP CAR IF OBJECT IS TOO CLOSE
         if len(self.object_list) > 0:
             for obj in self.object_list:
                 if obj.bbox.class_id in to_not_kill:
@@ -70,7 +111,12 @@ class Controller(object):
                         rospy.loginfo(f"STOP")
                         self.speed_publisher.publish(0)
 
-import os
+        # OVERTAKE FROM LEFT
+        if not self.has_overtaken:
+            self.overtake("left")
+            if self.overtaking == False:
+                self.has_overtaken = True
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(f"Usage : {sys.argv[0]} <parameter-file>")
@@ -80,8 +126,8 @@ if __name__ == "__main__":
 
         rospy.init_node("decision")
         node = Controller(config)
+        rate = rospy.Rate(RATE)
         while not rospy.is_shutdown():
-            rate = rospy.Rate(RATE)
             node.publish_control_inputs()
             rate.sleep()
 
