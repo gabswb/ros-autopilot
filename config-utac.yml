@@ -3,8 +3,11 @@ topic:
   # autopilot topic
   object-info: /perception/objects-info            
   object-bbox: /object_bounding_box
-  bbox-viz: /perception/viz/bounding_box
-  lidar-viz: /perception/viz/lidar
+  forward-bbox-viz: /perception/viz/forward_bounding_box
+  backward-bbox-viz: /perception/viz/backward_bounding_box
+  forward-lidar-viz: /perception/viz/forward_lidar
+  backward-lidar-viz: /perception/viz/backward_lidar
+
   
   # car topic
   forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           

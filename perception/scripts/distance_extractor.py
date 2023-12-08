@@ -42,7 +42,9 @@ class DistanceExtractor (object):
 
 		#Initialize the topic publishers
 		self.cv_bridge = CvBridge()
-		self.lidar_viz_publisher = rospy.Publisher(self.config["topic"]["lidar-viz"], Image, queue_size=10)
+		self.forward_lidar_viz_publisher = rospy.Publisher(self.config["topic"]["forward-lidar-viz"], Image, queue_size=10)
+		self.backward_lidar_viz_publisher = rospy.Publisher(self.config["topic"]["backward-lidar-viz"], Image, queue_size=10)
+
 		
 		# Initialize the transformation listener
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
@@ -193,7 +195,10 @@ class DistanceExtractor (object):
 					cv.drawMarker(image, (int(point[0]), int(point[1])), (int(color[0]), int(color[1]), int(color[2])), cv.MARKER_CROSS, 4)
 
 			image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
-			self.lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+			if camera_frame == 'camera_forward_optical_frame':
+				self.forward_lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+			else:
+				self.backward_lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
 
 		for bbox in bbox_list:
 			bbox_cropped = self.crop_bbox(bbox, 3)
