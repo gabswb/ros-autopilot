@@ -3,11 +3,7 @@ topic:
   # autopilot topic
   object-info: /perception/objects-info            
   object-bbox: /object_bounding_box
-  forward-bbox-viz: /perception/viz/forward_bounding_box
-  backward-bbox-viz: /perception/viz/backward_bounding_box
-  forward-lidar-viz: /perception/viz/forward_lidar
-  backward-lidar-viz: /perception/viz/backward_lidar
-
+  perception-viz: /perception_viz_topic
   
   # car topic
   forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
@@ -27,7 +23,6 @@ topic:
   forward-camera-height: 771
 
 map:
-  reference-frame: camera_forward_optical_frame
   world-frame: map                                         # Fixed frame of reference
   car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
   forward-camera-frame: camera_forward_optical_frame

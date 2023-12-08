@@ -29,8 +29,6 @@ class Perception(object):
         self.yolov8l = yolov8l
         self.use_map = use_map
         self.detect_lights = detect_lights
-        
-        self.reference_frame = config["map"]["reference-frame"]
 
         # Detection module
         self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
@@ -39,8 +37,7 @@ class Perception(object):
         self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
-        self.forward_bbox_viz_publisher = rospy.Publisher(config["topic"]["forward-bbox-viz"], Image, queue_size=10)
-        self.backward_bbox_viz_publisher = rospy.Publisher(config["topic"]["backward-bbox-viz"], Image, queue_size=10)
+        self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
         self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
@@ -110,52 +107,34 @@ class Perception(object):
             overall_start = time.time()
 
         forward_img = np.frombuffer(forward_img_data.data, dtype=np.uint8).reshape((forward_img_data.height, forward_img_data.width, 3))
-        backward_img = np.frombuffer(backward_img_data.data, dtype=np.uint8).reshape((backward_img_data.height, backward_img_data.width, 3))
 
         # detect objects
         if self.time_statistics:
             start = time.time()
-        forward_bbox_list = self.object_detector.detect(forward_img)
-        backward_bbox_list = self.surrounding_object_detector.detect(backward_img)
+        bbox_list = self.object_detector.detect(forward_img)
         if self.time_statistics:
             rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
 
         # if objects detected -> get object position
-        forward_obj_list = []
-        if len(forward_bbox_list) > 0:
+        obj_list = []
+        if len(bbox_list) > 0:
             if self.time_statistics:
                 start = time.time()
-            image_bbox_data = [(forward_img_data, forward_bbox_list)]
-            obj_list = self.distance_extractor.get_objects_position(image_bbox_data, point_cloud_data, self.reference_frame)
-            forward_obj_list.extend(obj_list)
+            obj_list = self.distance_extractor.get_objects_position(forward_img_data, point_cloud_data, bbox_list)
             if self.time_statistics:
-                rospy.loginfo(f"Distance extraction time forward: {time.time() - start:.2f}")
-        backward_obj_list = []
-        if len(backward_bbox_list) > 0:
-            if self.time_statistics:
-                start = time.time()
-            image_bbox_data = [(backward_img_data, backward_bbox_list)]
-            obj_list = self.distance_extractor.get_objects_position(image_bbox_data, point_cloud_data, self.reference_frame)
-            backward_obj_list.extend(obj_list)
-            if self.time_statistics:
-                rospy.loginfo(f"Distance extraction time backward: {time.time() - start:.2f}")
+                rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
 
         # check vehicle lights
         if self.detect_lights:
             if self.time_statistics:
                 start = time.time()
-            forward_obj_list = self.vehicle_light_detector.check_lights(forward_img, forward_obj_list)
+            obj_list = self.vehicle_light_detector.check_lights(forward_img, obj_list)
             if self.time_statistics:
                 rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")        
 
-        if (self.visualize or self.rviz_visualize) and len(forward_obj_list) > 0:
-            for obj in forward_obj_list:
+        if (self.visualize or self.rviz_visualize) and len(obj_list) > 0:
+            for obj in obj_list:
                 self.draw_bounding_box(forward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
-                
-        if (self.visualize or self.rviz_visualize) and len(backward_obj_list) > 0:
-            for obj in backward_obj_list:
-                self.draw_bounding_box(backward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
                                         obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
         
         if self.visualize:
@@ -165,16 +144,14 @@ class Perception(object):
 
         if self.rviz_visualize:
             forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-            backward_img = cv2.cvtColor(backward_img, cv2.COLOR_RGB2BGR)
-            self.forward_bbox_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
-            self.backward_bbox_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(backward_img))
-
+            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
+        
         object_list = ObjectList()
-        object_list.object_list = forward_obj_list + backward_obj_list
-        self.object_info_publisher.publish(object_list)
+        object_list.object_list = obj_list
+        self.object_info_publisher.publish(obj_list)
 
-        if self.log_objects and len(object_list.object_list) > 0:
-            rospy.loginfo(object_list)
+        if self.log_objects and len(obj_list) > 0:
+            rospy.loginfo(obj_list)
 
         if self.time_statistics:
             rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
