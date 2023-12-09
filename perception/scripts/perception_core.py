@@ -31,9 +31,10 @@ class Perception(object):
         self.detect_lights = detect_lights
 
         # Detection module
-        self.distance_extractor = DistanceExtractor(config, self.lidar_projection, self.use_map)
-        self.object_detector = ObjectDetector(config, yolov8l)
+        self.forward_distance_extractor = DistanceExtractor(config, self.config["topic"]["forward-camera-info"], self.config["topic"]["forward-bbox-viz"], self.lidar_projection, self.use_map)
+        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-bbox-viz"], self.lidar_projection, self.use_map)
         self.vehicle_light_detector = VehicleLightsDetector()
+        self.object_detector = ObjectDetector(config, yolov8l)
         self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
@@ -68,6 +69,85 @@ class Perception(object):
         rospy.loginfo(f"\tUse map: {self.use_map}")	
         rospy.loginfo(f"\tDetect light: {self.detect_lights}")
 
+    def perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, pointcloud_data):
+        if self.time_statistics:
+            overall_start = time.time()
+
+        # forward_img = np.frombuffer(forward_img_data.data, dtype=np.uint8).reshape((forward_img_data.height, forward_img_data.width, 3))
+        # backward_img = np.frombuffer(backward_img_data.data, dtype=np.uint8).reshape((backward_img_data.height, backward_img_data.width, 3))
+
+        images_data_extractor = [(forward_img_data, self.forward_distance_extractor), 
+                                 (backward_img_data, self.backward_distance_extractor)]
+        
+        object_list = []
+        for image_data, distance_extractor in images_data_extractor:
+            image = np.frombuffer(image_data.data, dtype=np.uint8).reshape((image_data.height, image_data.width, 3))
+            bbox_list = self.object_detector.detect(image)
+            object_list = distance_extractor.get_objects_position(image_data, pointcloud_data, bbox_list)
+            object_list = self.vehicle_light_detector.check_lights(image, object_list)
+
+            if (self.visualize or self.rviz_visualize) and len(object_list) > 0:
+                for obj in object_list:
+                    self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
+                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+            if self.visualize:
+                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                cv2.imshow('perception visualization', image)
+                cv2.waitKey(5)
+
+            if self.rviz_visualize:
+                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+
+        # # detect objects
+        # if self.time_statistics:
+        #     start = time.time()
+        # bbox_list = self.object_detector.detect(forward_img)
+        # if self.time_statistics:
+        #     rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
+
+        # # if objects detected -> get object position
+        # object_list = []
+        # if len(bbox_list) > 0:
+        #     if self.time_statistics:
+        #         start = time.time()
+        #     object_list = self.distance_extractor.get_objects_position(forward_img_data, pointcloud_data, bbox_list)
+        #     if self.time_statistics:
+        #         rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
+
+        # # check vehicle lights
+        # if self.detect_lights:
+        #     if self.time_statistics:
+        #         start = time.time()
+        #     object_list = self.vehicle_light_detector.check_lights(forward_img, object_list)
+        #     if self.time_statistics:
+        #         rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")        
+
+        # if (self.visualize or self.rviz_visualize) and len(object_list) > 0:
+        #     for obj in object_list:
+        #         self.draw_bounding_box(forward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
+        #                                 obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+        
+        # if self.visualize:
+        #     forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
+        #     cv2.imshow('perception visualization', forward_img)
+        #     cv2.waitKey(5)
+
+        # if self.rviz_visualize:
+        #     forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
+        #     self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
+        
+        object_list_msg = ObjectList()
+        object_list_msg.object_list = object_list
+        self.object_info_publisher.publish(object_list_msg)
+
+        if self.log_objects and len(object_list) > 0:
+            rospy.loginfo(object_list)
+
+        if self.time_statistics:
+            rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
+
+
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, left_blink = 0, right_blink = 0):
         label = ""
         if instance_id != 0:
@@ -101,61 +181,6 @@ class Perception(object):
 
         if right_blink > 0:
             cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-    def perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, point_cloud_data):
-        if self.time_statistics:
-            overall_start = time.time()
-
-        forward_img = np.frombuffer(forward_img_data.data, dtype=np.uint8).reshape((forward_img_data.height, forward_img_data.width, 3))
-
-        # detect objects
-        if self.time_statistics:
-            start = time.time()
-        bbox_list = self.object_detector.detect(forward_img)
-        if self.time_statistics:
-            rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
-
-        # if objects detected -> get object position
-        obj_list = []
-        if len(bbox_list) > 0:
-            if self.time_statistics:
-                start = time.time()
-            obj_list = self.distance_extractor.get_objects_position(forward_img_data, point_cloud_data, bbox_list)
-            if self.time_statistics:
-                rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
-
-        # check vehicle lights
-        if self.detect_lights:
-            if self.time_statistics:
-                start = time.time()
-            obj_list = self.vehicle_light_detector.check_lights(forward_img, obj_list)
-            if self.time_statistics:
-                rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")        
-
-        if (self.visualize or self.rviz_visualize) and len(obj_list) > 0:
-            for obj in obj_list:
-                self.draw_bounding_box(forward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
-        
-        if self.visualize:
-            forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-            cv2.imshow('perception visualization', forward_img)
-            cv2.waitKey(5)
-
-        if self.rviz_visualize:
-            forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-            self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
-        
-        object_list = ObjectList()
-        object_list.object_list = obj_list
-        self.object_info_publisher.publish(obj_list)
-
-        if self.log_objects and len(obj_list) > 0:
-            rospy.loginfo(obj_list)
-
-        if self.time_statistics:
-            rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
-
 
 
 if __name__ == "__main__":
