@@ -74,19 +74,19 @@ class Perception(object):
             overall_start = time.time()
 
         if self.backward_camera:
-            perception_pipeline = [(forward_img_data, self.forward_distance_extractor, self.forward_bbox_publisher),
-                                   (backward_img_data, self.backward_distance_extractor, self.backward_bbox_publisher)]
+            perception_pipeline = [(forward_img_data, self.object_detector, self.forward_distance_extractor, self.forward_bbox_publisher),
+                                   (backward_img_data, self.surrounding_object_detector, self.backward_distance_extractor, self.backward_bbox_publisher)]
         else:
-            perception_pipeline = [(forward_img_data, self.forward_distance_extractor, self.forward_bbox_publisher)]
+            perception_pipeline = [(forward_img_data, self.object_detector, self.forward_distance_extractor, self.forward_bbox_publisher)]
         
         object_list = []
 
-        for image_data, distance_extractor, publisher in perception_pipeline:
+        for image_data, object_detector, distance_extractor, publisher in perception_pipeline:
             image = np.frombuffer(image_data.data, dtype=np.uint8).reshape((image_data.height, image_data.width, 3))
 
             if self.time_statistics:
                 start = time.time()
-            bbox_list = self.object_detector.detect(image)
+            bbox_list = object_detector.detect(image)
             if self.time_statistics:
                 rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
             
