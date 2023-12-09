@@ -16,7 +16,6 @@ Run at the root dir (the one with src/ build/ etc ...)  :
 roscore
 simulator # launch utac simulator
 rosrun perception perception_core.py src/config-utac.yml 
-    -v # open a opencv window with the forward camera perspective
     --rviz # publish on visuzalition topic 
     --lidar-projection # !! only for visualization purpuse 
     --log-objects # log published objects (yolo detection + its distance + its instance ID)
@@ -24,6 +23,7 @@ rosrun perception perception_core.py src/config-utac.yml
     --yolov8l # use yolov8l model for better accuracy
     --use-map # use structural map to filer out object not on the road
     --no-lights # disable lights detection (for better performance)
+    --backward-camera # add backward camera in perception pipeline
 ```
 
 ### ONNX model generation

@@ -41,7 +41,7 @@ class DistanceExtractor (object):
 		self.camerainfo_subscriber = rospy.Subscriber(camera_info_topic, CameraInfo, self.callback_camerainfo)
 
 		#Initialize the topic publishers
-		self.ros_bridge = CvBridge()
+		self.cv_bridge = CvBridge()
 		self.lidar_viz_publisher = rospy.Publisher(lidar_viz_topic, Image, queue_size=10)
 		
 		# Initialize the transformation listener
@@ -167,14 +167,13 @@ class DistanceExtractor (object):
 				image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
 				self.lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
 
-
 			for bbox in bbox_list:
 				bbox_cropped = self.crop_bbox(bbox, 3)
 
 				filter = ((bbox_cropped.x <= image_points[0]) & (image_points[0] <= bbox_cropped.x + bbox_cropped.w) &
 			  			  (bbox_cropped.y <= image_points[1]) & (image_points[1] <= bbox_cropped.y + bbox_cropped.h))
 				#relevant_points_image = image_points[:, filter] # (2,N'')
-				#relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
+				relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
 				relevant_points_reference = pointcloud_reference[:, filter]
 
 				# distances in the reference frame 
@@ -184,23 +183,23 @@ class DistanceExtractor (object):
 				#index = np.argsort(distances)[len(distances)//4]
 				index = np.argmin(distances)
 				distance = distances[index]
-				position = pointcloud_reference[:, index]
+				position = relevant_points_reference[:, index]
 
 				if self.use_map:
 					# filter out object that are not on the road
-					reference_to_map = self.get_transform(self.config["map"]["reference-frame"], self.config["map"]["world-frame"])
+					reference_to_map = self.get_transform(self.reference_frame, self.config["map"]["world-frame"])
 					position_map = reference_to_map @ position.T
 					if not self.map_handler.is_on_road((position_map[0], position_map[1])):
 						continue
 
 				obj = Object()
 				obj.bbox = bbox
-				obj.distance = distance/2
+				obj.distance = distance
 				obj.x = position[0]
 				obj.y = position[1]
 				obj.z = position[2]
-				obj.left_blink = 0.0
-				obj.right_blink = 0.0
+				obj.left_blink = False
+				obj.right_blink = False
 				object_list.append(obj)
 
 		return object_list

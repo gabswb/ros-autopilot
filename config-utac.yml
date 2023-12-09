@@ -1,7 +1,7 @@
 
 topic:
   # autopilot topic
-  object-info: /perception/objects-info            
+  object-info: /perception/objects            
   object-bbox: /object_bounding_box
   forward-bbox-viz: /perception/viz/forward_bounding_box
   forward-right-bbox-viz: /perception/viz/forward_right_bounding_box

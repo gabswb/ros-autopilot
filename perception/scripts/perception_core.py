@@ -19,9 +19,8 @@ DISPLAY_LIGHT_BBOX = True
 
 
 class Perception(object):
-    def __init__(self, config, visualize = False, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False, detect_lights = True):
+    def __init__(self, config, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False, detect_lights = True, backward_camera = True):
         self.config = config
-        self.visualize = visualize
         self.rviz_visualize = rviz_visualize
         self.lidar_projection = lidar_projection
         self.log_objects = log_objects
@@ -29,20 +28,22 @@ class Perception(object):
         self.yolov8l = yolov8l
         self.use_map = use_map
         self.detect_lights = detect_lights
+        self.backward_camera = backward_camera
 
         # Detection module
-        self.forward_distance_extractor = DistanceExtractor(config, self.config["topic"]["forward-camera-info"], self.config["topic"]["forward-bbox-viz"], self.lidar_projection, self.use_map)
-        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-bbox-viz"], self.lidar_projection, self.use_map)
+        self.forward_distance_extractor = DistanceExtractor(config, self.config["topic"]["forward-camera-info"], self.config["topic"]["forward-lidar-viz"], self.lidar_projection, self.use_map)
+        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-lidar-viz"], self.lidar_projection, self.use_map)
         self.vehicle_light_detector = VehicleLightsDetector()
         self.object_detector = ObjectDetector(config, yolov8l)
         self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
-        self.visualization_publisher = rospy.Publisher(config["topic"]["perception-viz"], Image, queue_size=10)
+        self.forward_bbox_publisher = rospy.Publisher(config["topic"]["forward-bbox-viz"], Image, queue_size=10)
+        self.backward_bbox_publisher = rospy.Publisher(config["topic"]["backward-bbox-viz"], Image, queue_size=10)
         self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
-        if self.visualize or self.rviz_visualize:
+        if self.rviz_visualize:
             self.classes = None
             with open(config["model"]["detection-model-class-names-path"], 'r') as f:
                 self.classes = [line.strip() for line in f.readlines()]
@@ -60,7 +61,6 @@ class Perception(object):
         tss.registerCallback(self.perception_callback)
 
         rospy.loginfo(f"Perception ready with parameters:")
-        rospy.loginfo(f"\tOpencv visualize: {self.visualize}")
         rospy.loginfo(f"\tRViz visualize: {self.rviz_visualize}")
         rospy.loginfo(f"\tLidar projection: {self.lidar_projection}")
         rospy.loginfo(f"\tLog objects: {self.log_objects}")
@@ -73,79 +73,55 @@ class Perception(object):
         if self.time_statistics:
             overall_start = time.time()
 
-        # forward_img = np.frombuffer(forward_img_data.data, dtype=np.uint8).reshape((forward_img_data.height, forward_img_data.width, 3))
-        # backward_img = np.frombuffer(backward_img_data.data, dtype=np.uint8).reshape((backward_img_data.height, backward_img_data.width, 3))
-
-        images_data_extractor = [(forward_img_data, self.forward_distance_extractor), 
-                                 (backward_img_data, self.backward_distance_extractor)]
+        if self.backward_camera:
+            perception_pipeline = [(forward_img_data, self.forward_distance_extractor, self.forward_bbox_publisher),
+                                   (backward_img_data, self.backward_distance_extractor, self.backward_bbox_publisher)]
+        else:
+            perception_pipeline = [(forward_img_data, self.forward_distance_extractor, self.forward_bbox_publisher)]
         
         object_list = []
-        for image_data, distance_extractor in images_data_extractor:
-            image = np.frombuffer(image_data.data, dtype=np.uint8).reshape((image_data.height, image_data.width, 3))
-            bbox_list = self.object_detector.detect(image)
-            object_list = distance_extractor.get_objects_position(image_data, pointcloud_data, bbox_list)
-            object_list = self.vehicle_light_detector.check_lights(image, object_list)
 
-            if (self.visualize or self.rviz_visualize) and len(object_list) > 0:
-                for obj in object_list:
-                    self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
-            if self.visualize:
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                cv2.imshow('perception visualization', image)
-                cv2.waitKey(5)
+        for image_data, distance_extractor, publisher in perception_pipeline:
+            image = np.frombuffer(image_data.data, dtype=np.uint8).reshape((image_data.height, image_data.width, 3))
+
+            if self.time_statistics:
+                start = time.time()
+            bbox_list = self.object_detector.detect(image)
+            if self.time_statistics:
+                rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
+            
+            if self.time_statistics:
+                start = time.time()
+            objects = distance_extractor.get_objects_position(image_data, pointcloud_data, bbox_list)
+            if self.time_statistics:
+                rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
+
+            if self.time_statistics:
+                start = time.time()
+            objects = self.vehicle_light_detector.check_lights(image, objects)
+            if self.time_statistics:
+                rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")   
 
             if self.rviz_visualize:
+                for obj in objects:
+                    self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
+                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+                
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
-
-        # # detect objects
-        # if self.time_statistics:
-        #     start = time.time()
-        # bbox_list = self.object_detector.detect(forward_img)
-        # if self.time_statistics:
-        #     rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
-
-        # # if objects detected -> get object position
-        # object_list = []
-        # if len(bbox_list) > 0:
-        #     if self.time_statistics:
-        #         start = time.time()
-        #     object_list = self.distance_extractor.get_objects_position(forward_img_data, pointcloud_data, bbox_list)
-        #     if self.time_statistics:
-        #         rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
-
-        # # check vehicle lights
-        # if self.detect_lights:
-        #     if self.time_statistics:
-        #         start = time.time()
-        #     object_list = self.vehicle_light_detector.check_lights(forward_img, object_list)
-        #     if self.time_statistics:
-        #         rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")        
-
-        # if (self.visualize or self.rviz_visualize) and len(object_list) > 0:
-        #     for obj in object_list:
-        #         self.draw_bounding_box(forward_img, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-        #                                 obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
-        
-        # if self.visualize:
-        #     forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-        #     cv2.imshow('perception visualization', forward_img)
-        #     cv2.waitKey(5)
-
-        # if self.rviz_visualize:
-        #     forward_img = cv2.cvtColor(forward_img, cv2.COLOR_RGB2BGR)
-        #     self.visualization_publisher.publish(self.cv_bridge.cv2_to_imgmsg(forward_img))
+                publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+                
+            object_list.extend(objects)
         
         object_list_msg = ObjectList()
         object_list_msg.object_list = object_list
         self.object_info_publisher.publish(object_list_msg)
 
         if self.log_objects and len(object_list) > 0:
-            rospy.loginfo(object_list)
+            rospy.loginfo(object_list_msg)
 
         if self.time_statistics:
             rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
+
 
 
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, left_blink = 0, right_blink = 0):
@@ -185,12 +161,20 @@ class Perception(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [-v] [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map] [--no-lights]")
+        print(f"Usage : {sys.argv[0]} <config-file> [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map] [--no-lights] [--backward-camera]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
 
         rospy.init_node("perception")
-        p = Perception(config,'-v' in sys.argv, '--rviz' in sys.argv, '--lidar-projection' in sys.argv, '--log-objects' in sys.argv, '--time-statistics' in sys.argv, '--yolov8l' in sys.argv, '--use-map' in sys.argv, not '--no-lights' in sys.argv)
+        p = Perception(config,
+                        '--rviz' in sys.argv,
+                        '--lidar-projection' in sys.argv,
+                        '--log-objects' in sys.argv,
+                        '--time-statistics' in sys.argv,
+                        '--yolov8l' in sys.argv,
+                        '--use-map' in sys.argv,
+                        not '--no-lights' in sys.argv,
+                        '--backward-camera' in sys.argv)
         rospy.spin()
 
