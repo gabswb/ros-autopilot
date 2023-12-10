@@ -173,7 +173,7 @@ class DistanceExtractor (object):
 				filter = ((bbox_cropped.x <= image_points[0]) & (image_points[0] <= bbox_cropped.x + bbox_cropped.w) &
 			  			  (bbox_cropped.y <= image_points[1]) & (image_points[1] <= bbox_cropped.y + bbox_cropped.h))
 				#relevant_points_image = image_points[:, filter] # (2,N'')
-				relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
+				#relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
 				relevant_points_reference = pointcloud_reference[:, filter]
 
 				# distances in the reference frame 

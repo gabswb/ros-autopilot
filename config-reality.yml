@@ -1,8 +1,15 @@
 topic:
   # autopilot topic
-  object-info: /perception/objects-info            
+  object-info: /perception/objects            
   object-bbox: /object_bounding_box
-  perception-viz: /perception_viz_topic
+  forward-bbox-viz: /perception/viz/forward_bounding_box
+  forward-right-bbox-viz: /perception/viz/forward_right_bounding_box
+  forward-left-bbox-viz: /perception/viz/forward_left_bounding_box
+  backward-bbox-viz: /perception/viz/backward_bounding_box
+  forward-lidar-viz: /perception/viz/forward_lidar
+  forward-right-lidar-viz: /perception/viz/forward_right_lidar
+  forward-left-lidar-viz: /perception/viz/forward_left_lidar
+  backward-lidar-viz: /perception/viz/backward_lidar
 
   # car topic
   forward-camera: /zoe2/sensors/cameras/front_top/image_raw
@@ -22,6 +29,7 @@ topic:
 map:
   world-frame: map                                         # Fixed frame of reference
   car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
+  reference-frame: camera_forward_optical_frame
   forward-camera-frame: camera_forward_optical_frame
   road-network-path: src/road_network.json  
 
