@@ -99,9 +99,23 @@ class Controller(object):
                 self.overtaking = False
                 rospy.loginfo("Finished overtaking")
         
+    def has_hazard_lights_on(self, obj):
+        """Check if the hazard lights are on for the given object."""
+        return obj.left_blink or obj.right_blink
+
+    def is_on_the_same_lane(self, obj, max_lateral_distance=3):
+        """Check if the object is on the same lane as the car."""
+        return abs(obj.bbox.y) <= max_lateral_distance
+
+    def vehicule_around(self, target_obj):
+        if not target_obj:
+            return False
+        # We can add more conditions here to determine if an object will be a problem for overtaking
+        return self.is_on_the_same_lane(target_obj)
 
     def publish_control_inputs(self, ):
         """Publish the control inputs to the car"""
+        object_in_front = None
         # STOP CAR IF OBJECT IS TOO CLOSE
         if len(self.object_list) > 0:
             for obj in self.object_list:
@@ -110,12 +124,25 @@ class Controller(object):
                     if obj.distance < THRESHOLD_DISTANCE:
                         rospy.loginfo(f"STOP")
                         self.speed_publisher.publish(0)
+                        object_in_front = obj
 
-        # OVERTAKE FROM LEFT
-        if not self.has_overtaken:
-            self.overtake("left")
-            if self.overtaking == False:
-                self.has_overtaken = True
+        # OVERTAKE CHECK
+        if object_in_front:
+            if self.has_hazard_lights_on(object_in_front):
+                no_vehicles_around = True
+                for obj in self.object_list:
+                    if obj != object_in_front and self.vehicule_around(obj):
+                        no_vehicles_around = False
+                        break 
+                    
+                if no_vehicles_around:
+                    rospy.loginfo("Overtaking allowed")
+                    self.overtake("left")
+                    if self.overtaking == False:
+                        self.has_overtaken = True
+                else:
+                    rospy.loginfo("Other vehicles around. Cannot overtake")
+                    
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
