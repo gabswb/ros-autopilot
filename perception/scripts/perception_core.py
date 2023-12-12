@@ -32,14 +32,16 @@ class Perception(object):
 
         # Detection module
         self.forward_distance_extractor = DistanceExtractor(config, self.config["topic"]["forward-camera-info"], self.config["topic"]["forward-lidar-viz"], self.lidar_projection, self.use_map)
-        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-lidar-viz"], self.lidar_projection, self.use_map)
+        if self.backward_camera:
+            self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-lidar-viz"], self.lidar_projection, self.use_map)
+            self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
         self.vehicle_light_detector = VehicleLightsDetector()
         self.object_detector = ObjectDetector(config, yolov8l)
-        self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
 
         # Publisher
         self.forward_bbox_publisher = rospy.Publisher(config["topic"]["forward-bbox-viz"], Image, queue_size=10)
-        self.backward_bbox_publisher = rospy.Publisher(config["topic"]["backward-bbox-viz"], Image, queue_size=10)
+        if self.backward_camera:
+            self.backward_bbox_publisher = rospy.Publisher(config["topic"]["backward-bbox-viz"], Image, queue_size=10)
         self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
         # visualization utils
@@ -52,13 +54,18 @@ class Perception(object):
             self.cv_bridge = CvBridge()
 
         # Launch perception
-        tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
+        if self.backward_camera:
+            tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
                                            Subscriber(config["topic"]["forward-left-camera"], Image),
                                            Subscriber(config["topic"]["forward-right-camera"], Image),
                                            Subscriber(config["topic"]["backward-camera"], Image),
                             Subscriber(config["topic"]["pointcloud"], PointCloud2)], 10, 0.1, allow_headerless=True)
+            tss.registerCallback(self.multicamera_perception_callback)
+        else:
+            tss = ApproximateTimeSynchronizer([Subscriber(config["topic"]["forward-camera"], Image),
+                                               Subscriber(config["topic"]["pointcloud"], PointCloud2)], 10, 0.1, allow_headerless=True)
+            tss.registerCallback(self.singlecamera_perception_callback)
 
-        tss.registerCallback(self.perception_callback)
 
         rospy.loginfo(f"Perception ready with parameters:")
         rospy.loginfo(f"\tRViz visualize: {self.rviz_visualize}")
@@ -69,15 +76,12 @@ class Perception(object):
         rospy.loginfo(f"\tUse map: {self.use_map}")	
         rospy.loginfo(f"\tDetect light: {self.detect_lights}")
 
-    def perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, pointcloud_data):
+    def multicamera_perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, pointcloud_data):
         if self.time_statistics:
             overall_start = time.time()
 
-        if self.backward_camera:
-            perception_pipeline = [(forward_img_data, self.object_detector, self.forward_distance_extractor, self.forward_bbox_publisher),
-                                   (backward_img_data, self.surrounding_object_detector, self.backward_distance_extractor, self.backward_bbox_publisher)]
-        else:
-            perception_pipeline = [(forward_img_data, self.object_detector, self.forward_distance_extractor, self.forward_bbox_publisher)]
+        perception_pipeline = [(forward_img_data, self.object_detector, self.forward_distance_extractor, self.forward_bbox_publisher),
+                               (backward_img_data, self.surrounding_object_detector, self.backward_distance_extractor, self.backward_bbox_publisher)]
         
         object_list = []
 
@@ -109,6 +113,52 @@ class Perception(object):
                 
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                 publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+                
+            object_list.extend(objects)
+        
+        object_list_msg = ObjectList()
+        object_list_msg.object_list = object_list
+        self.object_info_publisher.publish(object_list_msg)
+
+        if self.log_objects and len(object_list) > 0:
+            rospy.loginfo(object_list_msg)
+
+        if self.time_statistics:
+            rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
+
+    def singlecamera_perception_callback(self, image_data, pointcloud_data):
+        if self.time_statistics:
+            overall_start = time.time()
+        
+        object_list = []
+
+        image = np.frombuffer(image_data.data, dtype=np.uint8).reshape((image_data.height, image_data.width, 3))
+
+        if self.time_statistics:
+            start = time.time()
+        bbox_list = self.object_detector.detect(image)
+        if self.time_statistics:
+            rospy.loginfo(f"Detection time: {time.time() - start:.2f}")
+        
+        if self.time_statistics:
+            start = time.time()
+        objects = self.forward_distance_extractor.get_objects_position(image_data, pointcloud_data, bbox_list)
+        if self.time_statistics:
+            rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")
+
+        if self.time_statistics:
+            start = time.time()
+        objects = self.vehicle_light_detector.check_lights(image, objects)
+        if self.time_statistics:
+            rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")   
+
+        if self.rviz_visualize:
+            for obj in objects:
+                self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
+                                    obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+            
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            self.forward_bbox_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
                 
             object_list.extend(objects)
         
