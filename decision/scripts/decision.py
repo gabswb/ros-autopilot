@@ -14,6 +14,8 @@ to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplan
 THRESHOLD_DISTANCE = 10 # meters
 RATE = 10 # Hz
 
+LANE_WIDTH = 3
+
 class Controller(object):
     def __init__(self, config):
         self.config = config
@@ -34,7 +36,6 @@ class Controller(object):
         # Overtaking states
         self.overtaking = False
         self.start_overtaking_time = None
-        self.has_overtaken = False
 
         # Get classes names
         self.classes = None
@@ -98,24 +99,38 @@ class Controller(object):
             else:
                 self.overtaking = False
                 rospy.loginfo("Finished overtaking")
-        
+    
+    def hazard_lights_on(self, object):
+        return object.left_blink and object.right_blink
+
+    def is_preceding(self, object):
+        return (np.abs(object.x) <= LANE_WIDTH) and object.z >= 0
+
+    def is_opposite(self, object):
+        return (np.abs(object.x) >= LANE_WIDTH)
+
 
     def publish_control_inputs(self, ):
         """Publish the control inputs to the car"""
         # STOP CAR IF OBJECT IS TOO CLOSE
-        if len(self.object_list) > 0:
-            for obj in self.object_list:
-                if obj.bbox.class_id in to_not_kill:
-                    rospy.loginfo(f"{obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+        opposite_objects = []
+        preceding_object = None
+        for obj in self.object_list:
+            if obj.bbox.class_id in to_not_kill:
+                if self.is_opposite(obj):
+                    rospy.loginfo(f"Opposite {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                    opposite_objects.append(obj)
+                if self.is_preceding(obj):
+                    rospy.loginfo(f"Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                    preceding_object = obj
                     if obj.distance < THRESHOLD_DISTANCE:
                         rospy.loginfo(f"STOP")
                         self.speed_publisher.publish(0)
 
         # OVERTAKE FROM LEFT
-        if not self.has_overtaken:
-            self.overtake("left")
-            if self.overtaking == False:
-                self.has_overtaken = True
+        if preceding_object is not None:
+            if self.hazard_lights_on(preceding_object) and len(opposite_objects) == 0:
+                self.overtake("left")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
