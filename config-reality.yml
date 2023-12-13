@@ -15,9 +15,9 @@ topic:
   forward-camera: /zoe2/sensors/cameras/front_top/image_raw
   forward-camera-info: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]      
   forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  
-  forward-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
-  forward-rigth-camera: /forwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
-  forward-rigth-camera-info: /forwardCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
+  forward-left-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
+  forward-right-camera: /forwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  forward-right-camera-info: /forwardCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
   backward-camera: /backwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
   backward-camera-info: /backwardCamera/camera_info 
   velocity: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
