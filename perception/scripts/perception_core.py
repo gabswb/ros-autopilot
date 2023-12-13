@@ -160,7 +160,7 @@ class Perception(object):
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             self.forward_bbox_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
                 
-            object_list.extend(objects)
+        object_list.extend(objects)
         
         object_list_msg = ObjectList()
         object_list_msg.object_list = object_list
