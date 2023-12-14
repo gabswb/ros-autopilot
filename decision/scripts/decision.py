@@ -11,6 +11,13 @@ from geometry_msgs.msg import TwistStamped
 from perception.msg import ObjectList, Object, ObjectBoundingBox
 
 
+import sys
+# caution: path[0] is reserved for script path (or '' in REPL)
+sys.path.insert(1, '../../perception/scripts/')
+
+from map_handler import MapHandler
+
+
 to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
 STOP_THRESHOLD_DISTANCE = 10 # meters
 RATE = 10 # Hz
@@ -48,6 +55,8 @@ class Controller(object):
         self.classes = None
         with open(self.class_name_path, 'r') as f:
             self.classes = [line.strip() for line in f.readlines()]
+
+        self.map_handler = map_handler.MapHandler(self.config)
 
         # Initialize perception topic subscribers
         self.perception_subscriber = rospy.Subscriber(self.object_info_topic, ObjectList, self.callback_perception)
@@ -109,12 +118,6 @@ class Controller(object):
     
     def hazard_lights_on(self, object):
         return object.left_blink and object.right_blink
-
-    def is_preceding(self, object):
-        return (np.abs(object.x) <= LANE_WIDTH) and object.z >= 0
-
-    def is_opposite(self, object):
-        return (np.abs(object.x) >= LANE_WIDTH and np.abs(object.x) <= 2*LANE_WIDTH  and object.distance < OPPOSITE_TRESHOLD_DISTANCE)
 
     def toogle_navigation(self,):
         try:
