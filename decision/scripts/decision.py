@@ -11,10 +11,12 @@ from perception.msg import ObjectList, Object, ObjectBoundingBox
 
 
 to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
-THRESHOLD_DISTANCE = 10 # meters
+STOP_THRESHOLD_DISTANCE = 20 # meters
 RATE = 10 # Hz
 
 LANE_WIDTH = 3
+OPPOSITE_TRESHOLD_DISTANCE = 40
+
 
 class Controller(object):
     def __init__(self, config):
@@ -80,7 +82,7 @@ class Controller(object):
             self.overtaking = True
         else:
             gap = rospy.get_time() - self.start_overtaking_time
-            rospy.loginfo(f"Gap: {gap:.2f}")
+            #rospy.loginfo(f"Gap: {gap:.2f}")
             self.speed_publisher.publish(2)
             if gap < 2:
                 self.steering_angle_publisher.publish(0)
@@ -107,7 +109,7 @@ class Controller(object):
         return (np.abs(object.x) <= LANE_WIDTH) and object.z >= 0
 
     def is_opposite(self, object):
-        return (np.abs(object.x) >= LANE_WIDTH)
+        return (np.abs(object.x) >= LANE_WIDTH and np.abs(object.x) <= 2*LANE_WIDTH  and object.distance < OPPOSITE_TRESHOLD_DISTANCE)
 
 
     def publish_control_inputs(self, ):
@@ -121,10 +123,10 @@ class Controller(object):
                     rospy.loginfo(f"Opposite {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                     opposite_objects.append(obj)
                 if self.is_preceding(obj):
-                    rospy.loginfo(f"Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                    #rospy.loginfo(f"Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                     preceding_object = obj
-                    if obj.distance < THRESHOLD_DISTANCE:
-                        rospy.loginfo(f"STOP")
+                    if obj.distance < STOP_THRESHOLD_DISTANCE:
+                        #rospy.loginfo(f"STOP")
                         self.speed_publisher.publish(0)
 
         # OVERTAKE FROM LEFT
