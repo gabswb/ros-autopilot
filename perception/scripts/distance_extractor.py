@@ -16,7 +16,7 @@ import transforms3d.quaternions as quaternions
 from sensor_msgs.msg import CameraInfo, Image
 from perception.msg import Object, ObjectBoundingBox
 
-import map_handler
+from common_scripts import map_handler
 
 
 DISTANCE_SCALE_MIN = 0

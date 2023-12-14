@@ -36,13 +36,13 @@ class MapHandler(object):
 		
 	def get_lane_side(self, object):
 		if np.abs(object.x) <= self.lane_width/2 and object.z >= 0:
-			return lane_side.FRONT.value
+			return lane_side.FRONT
 		elif object.x < -self.lane_width/2 and object.x >= -self.lane_width*3/2:
-			return lane_side.LEFT.value
+			return lane_side.LEFT
 		elif object.x > self.lane_width/2 and object.x <= self.lane_width*3/2:
-			return lane_side.RIGHT.value
+			return lane_side.RIGHT
 		else:
-			return lane_side.AWAY.value
+			return lane_side.AWAY
 		
 	def is_on_road(self, target_position):
 		'''Return true if target_position is on the road
