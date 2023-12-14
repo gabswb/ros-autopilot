@@ -120,87 +120,87 @@ class DistanceExtractor (object):
 	def get_objects_position(self, image_data, pointcloud_data, bbox_list):
 		"""Superimpose a point cloud from the lidar onto an image from the camera"""
 
-		object_list = []		
+		if len(bbox_list) == 0: return []
 
-		if len(bbox_list) > 0:
+		camera_frame, image = self.image_preprocessing(image_data)
+		lidar_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
 
-			camera_frame, image = self.image_preprocessing(image_data)
-			lidar_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
+		sensor_to_image = self.sensor_to_image
+		lidar_to_camera = self.get_transform(lidar_frame, camera_frame)
+		lidar_to_reference = self.get_transform(lidar_frame, self.reference_frame)
+		
+		pointcloud_camera = lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
+		pointcloud_reference = lidar_to_reference @ pointcloud # (4,N) = (4,4) @ (4,N)
 
-			sensor_to_image = self.sensor_to_image
-			lidar_to_camera = self.get_transform(lidar_frame, camera_frame)
-			lidar_to_reference = self.get_transform(lidar_frame, self.reference_frame)
-			
-			pointcloud_camera = lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
-			pointcloud_reference = lidar_to_reference @ pointcloud # (4,N) = (4,4) @ (4,N)
+		# Filter out points that are behind the camera, otherwise the following calculations overlay them on the image with inverted coordinates
+		valid_points = (pointcloud_camera[2, :] >= 0) # (N,)
+		pointcloud_camera = pointcloud_camera[:, valid_points] # (4,N')
+		pointcloud_reference = pointcloud_reference[:, valid_points] # (4,N')
 
-			# Filter out points that are behind the camera, otherwise the following calculations overlay them on the image with inverted coordinates
-			valid_points = (pointcloud_camera[2, :] >= 0) # (N,)
-			pointcloud_camera = pointcloud_camera[:, valid_points] # (4,N')
-			pointcloud_reference = pointcloud_reference[:, valid_points] # (4,N')
+		ro = np.linalg.norm(pointcloud_camera[:3,:], axis=0) # (N',)
 
-			ro = np.linalg.norm(pointcloud_camera[:3,:], axis=0) # (N',)
+		pointcloud_sensor = np.asarray((
+			pointcloud_camera[0] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
+			pointcloud_camera[1] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
+			np.ones(pointcloud_camera.shape[1])
+		))
 
-			pointcloud_sensor = np.asarray((
-				pointcloud_camera[0] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
-				pointcloud_camera[1] / (pointcloud_camera[2]+(ro*self.distortion_parameter)),
-				np.ones(pointcloud_camera.shape[1])
-			))
+		pointcloud_image = sensor_to_image @ pointcloud_sensor # (3,N')
 
-			pointcloud_image = sensor_to_image @ pointcloud_sensor # (3,N')
+		# Finalize the projection ([u v w] ⟶ [u/w v/w])
+		image_points = np.asarray((
+			pointcloud_image[0] / (pointcloud_image[2]),
+			pointcloud_image[1] / (pointcloud_image[2]),
+		)) # (2,N')
 
-			# Finalize the projection ([u v w] ⟶ [u/w v/w])
-			image_points = np.asarray((
-				pointcloud_image[0] / (pointcloud_image[2]),
-				pointcloud_image[1] / (pointcloud_image[2]),
-			)) # (2,N')
+		if self.visualize_lidar:
+			image = cv.cvtColor(image, cv.COLOR_RGB2HSV)
+			colors = self.get_color(ro)
 
-			if self.visualize_lidar:
-				image = cv.cvtColor(image, cv.COLOR_RGB2HSV)
-				colors = self.get_color(ro)
+			# Write all points to the final image
+			for color, point in zip(colors, image_points.T):
+				if 0 <= point[0] < image.shape[1] and 0 <= point[1] < image.shape[0]:
+					cv.drawMarker(image, (int(point[0]), int(point[1])), (int(color[0]), int(color[1]), int(color[2])), cv.MARKER_CROSS, 4)
 
-				# Write all points to the final image
-				for color, point in zip(colors, image_points.T):
-					if 0 <= point[0] < image.shape[1] and 0 <= point[1] < image.shape[0]:
-						cv.drawMarker(image, (int(point[0]), int(point[1])), (int(color[0]), int(color[1]), int(color[2])), cv.MARKER_CROSS, 4)
+			image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
+			self.lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
 
-				image = cv.cvtColor(image, cv.COLOR_HSV2BGR)
-				self.lidar_viz_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
+		object_list = []
 
-			for bbox in bbox_list:
-				bbox_cropped = self.crop_bbox(bbox, 3)
+		for bbox in bbox_list:
+			bbox_cropped = self.crop_bbox(bbox, 3)
 
-				filter = ((bbox_cropped.x <= image_points[0]) & (image_points[0] <= bbox_cropped.x + bbox_cropped.w) &
-			  			  (bbox_cropped.y <= image_points[1]) & (image_points[1] <= bbox_cropped.y + bbox_cropped.h))
-				#relevant_points_image = image_points[:, filter] # (2,N'')
-				#relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
-				relevant_points_reference = pointcloud_reference[:, filter]
+			filter = ((bbox_cropped.x <= image_points[0]) & (image_points[0] <= bbox_cropped.x + bbox_cropped.w) &
+						(bbox_cropped.y <= image_points[1]) & (image_points[1] <= bbox_cropped.y + bbox_cropped.h))
+			#relevant_points_image = image_points[:, filter] # (2,N'')
+			#relevant_points_camera = pointcloud_camera[:, filter] #(4,N'')
+			relevant_points_reference = pointcloud_reference[:, filter]
 
-				# distances in the reference frame 
-				distances = np.linalg.norm(relevant_points_reference[:3,:], axis=0) #(N'',)
-				if len(distances) == 0: continue # non lidar points projected onto the object
+			# distances in the reference frame 
+			distances = np.linalg.norm(relevant_points_reference[:3,:], axis=0) #(N'',)
+			if len(distances) == 0: continue # non lidar points projected onto the object
 
-				#index = np.argsort(distances)[len(distances)//4]
-				index = np.argmin(distances)
-				distance = distances[index]
-				position = relevant_points_reference[:, index]
+			#index = np.argsort(distances)[len(distances)//4]
+			index = np.argmin(distances)
+			distance = distances[index]
+			position = relevant_points_reference[:, index]
 
-				if self.use_map:
-					# filter out object that are not on the road
-					reference_to_map = self.get_transform(self.reference_frame, self.config["map"]["world-frame"])
-					position_map = reference_to_map @ position.T
-					if not self.map_handler.is_on_road((position_map[0], position_map[1])):
-						continue
+			if self.use_map:
+				# filter out object that are not on the road
+				reference_to_map = self.get_transform(self.reference_frame, self.config["map"]["world-frame"])
+				position_map = reference_to_map @ position.T
+				if not self.map_handler.is_on_road((position_map[0], position_map[1])):
+					continue
 
-				obj = Object()
-				obj.bbox = bbox
-				obj.distance = distance
-				obj.x = position[0]
-				obj.y = position[1]
-				obj.z = position[2]
-				obj.left_blink = False
-				obj.right_blink = False
-				object_list.append(obj)
+			obj = Object()
+			obj.bbox = bbox
+			obj.distance = distance
+			obj.x = position[0]
+			obj.y = position[1]
+			obj.z = position[2]
+			obj.left_blink = False
+			obj.right_blink = False
+			object_list.append(obj)
 
 		return object_list
 	

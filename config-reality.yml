@@ -32,6 +32,7 @@ service:
   toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
 
 map:
+  lane-width: 3.5                                         # Width of the lane in meters
   world-frame: map                                         # Fixed frame of reference
   car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
   reference-frame: front_top_camera_optical_frame

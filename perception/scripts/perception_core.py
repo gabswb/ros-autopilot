@@ -13,6 +13,7 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from object_detector import ObjectDetector
 from distance_extractor import DistanceExtractor
+from map_handler import MapHandler
 from vehicle_lights import VehicleLightsDetector, BLINK_HEIGHT, RIGHT_BLINK, LEFT_BLINK, HAS_LIGHT
 
 DISPLAY_LIGHT_BBOX = True
@@ -37,6 +38,7 @@ class Perception(object):
             self.surrounding_object_detector = ObjectDetector(config, yolov8l, False)
         self.vehicle_light_detector = VehicleLightsDetector()
         self.object_detector = ObjectDetector(config, yolov8l)
+        self.map_handler = MapHandler(config)
 
         # Publisher
         self.forward_bbox_publisher = rospy.Publisher(config["topic"]["forward-bbox-viz"], Image, queue_size=10)
@@ -109,7 +111,7 @@ class Perception(object):
             if self.rviz_visualize:
                 for obj in objects:
                     self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-                                        obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+                                        obj.bbox.y + obj.bbox.h, obj, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
                 
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
                 publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
@@ -155,7 +157,7 @@ class Perception(object):
         if self.rviz_visualize:
             for obj in objects:
                 self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
-                                    obj.bbox.y + obj.bbox.h, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
+                                    obj.bbox.y + obj.bbox.h, obj, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)
             
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             self.forward_bbox_publisher.publish(self.cv_bridge.cv2_to_imgmsg(image))
@@ -174,7 +176,7 @@ class Perception(object):
 
 
 
-    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, d = None, instance_id = None, left_blink = False, right_blink = False):
+    def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, object, d = None, instance_id = None, left_blink = False, right_blink = False):
         label = ""
         if instance_id != 0:
             label = f"#{instance_id}: "
@@ -202,11 +204,15 @@ class Perception(object):
 
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
-        if left_blink:
-            cv2.putText(img, "L Blink", (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        # if left_blink:
+        #     cv2.putText(img, "L Blink", (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        if right_blink:
-            cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        # if right_blink:
+        #     cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        lane_side = self.map_handler.get_lane_side(object)
+        cv2.putText(img, lane_side, (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
 
 
 if __name__ == "__main__":
