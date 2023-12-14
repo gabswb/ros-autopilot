@@ -11,9 +11,6 @@ topic:
   forward-right-lidar-viz: /perception/viz/forward_right_lidar
   forward-left-lidar-viz: /perception/viz/forward_left_lidar
   backward-lidar-viz: /perception/viz/backward_lidar
-
-
-
   
   # car topic
   forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
@@ -38,6 +35,9 @@ map:
   reference-frame: camera_forward_optical_frame
   forward-camera-frame: camera_forward_optical_frame
   road-network-path: src/road_network.json  
+
+service:
+  toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
 
 model:
   detection-model-class-names-path: src/models/yolov4-tiny/classes.names

@@ -6,15 +6,16 @@ import numpy as np
 
 import rospy
 from std_msgs.msg import Float32, String, UInt8
+from std_srvs.srv import Empty
 from geometry_msgs.msg import TwistStamped
 from perception.msg import ObjectList, Object, ObjectBoundingBox
 
 
 to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
-STOP_THRESHOLD_DISTANCE = 20 # meters
+STOP_THRESHOLD_DISTANCE = 10 # meters
 RATE = 10 # Hz
 
-LANE_WIDTH = 3
+LANE_WIDTH = 1.5
 OPPOSITE_TRESHOLD_DISTANCE = 40
 
 
@@ -28,6 +29,7 @@ class Controller(object):
         self.speed_topic = self.config["topic"]["speed"]
         self.speed_cap_topic = self.config["topic"]["speed-cap"]
         self.object_info_topic = self.config["topic"]["object-info"]
+        self.toogle_navigation_service_name = self.config["service"]["toogle-navigation"]
         self.class_name_path = self.config["model"]["detection-model-class-names-path"]
 
         # Situation states
@@ -53,6 +55,8 @@ class Controller(object):
         # Initialize the car control publishers
         self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
         self.steering_angle_publisher = rospy.Publisher(self.steering_angle, Float32, queue_size=10)
+        rospy.wait_for_service(self.toogle_navigation_service_name)
+        self.toogle_navigation_service = rospy.ServiceProxy(self.toogle_navigation_service_name, Empty)
         rospy.loginfo("Decision ready")
 
 
@@ -80,6 +84,7 @@ class Controller(object):
             rospy.loginfo("Start overtaking")
             self.start_overtaking_time = rospy.get_time()
             self.overtaking = True
+            self.toogle_navigation()
         else:
             gap = rospy.get_time() - self.start_overtaking_time
             #rospy.loginfo(f"Gap: {gap:.2f}")
@@ -100,6 +105,7 @@ class Controller(object):
                 self.steering_angle_publisher.publish(0)
             else:
                 self.overtaking = False
+                self.toogle_navigation()
                 rospy.loginfo("Finished overtaking")
     
     def hazard_lights_on(self, object):
@@ -111,6 +117,11 @@ class Controller(object):
     def is_opposite(self, object):
         return (np.abs(object.x) >= LANE_WIDTH and np.abs(object.x) <= 2*LANE_WIDTH  and object.distance < OPPOSITE_TRESHOLD_DISTANCE)
 
+    def toogle_navigation(sefl,):
+        try:
+            node.toogle_navigation_service()
+        except rospy.ServiceException as e:
+            rospy.loginfo(f"Service call failed")
 
     def publish_control_inputs(self, ):
         """Publish the control inputs to the car"""
@@ -123,15 +134,16 @@ class Controller(object):
                     rospy.loginfo(f"Opposite {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                     opposite_objects.append(obj)
                 if self.is_preceding(obj):
-                    #rospy.loginfo(f"Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                    rospy.loginfo(f"Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                     preceding_object = obj
-                    if obj.distance < STOP_THRESHOLD_DISTANCE:
-                        #rospy.loginfo(f"STOP")
+                    # rospy.loginfo(f't:{STOP_THRESHOLD_DISTANCE*self.real_speed:.2f}')
+                    if (obj.distance < STOP_THRESHOLD_DISTANCE*self.real_speed or obj.distance < STOP_THRESHOLD_DISTANCE):
+                        rospy.loginfo(f"STOP")
                         self.speed_publisher.publish(0)
 
         # OVERTAKE FROM LEFT
         if preceding_object is not None:
-            if self.hazard_lights_on(preceding_object) and len(opposite_objects) == 0:
+            if self.hazard_lights_on(preceding_object) and len(opposite_objects) == 0 and (self.real_speed < 0.5 or self.overtaking):
                 self.overtake("left")
 
 if __name__ == "__main__":

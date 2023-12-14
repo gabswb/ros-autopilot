@@ -28,6 +28,9 @@ topic:
   forward-camera-width: 1028
   forward-camera-height: 771
 
+service:
+  toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
+
 map:
   world-frame: map                                         # Fixed frame of reference
   car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
