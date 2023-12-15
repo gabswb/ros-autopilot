@@ -12,14 +12,9 @@ from perception.msg import ObjectList, Object, ObjectBoundingBox
 from common_scripts.map_handler import MapHandler, lane_side
 
 
-import sys
-# caution: path[0] is reserved for script path (or '' in REPL)
-sys.path.insert(1, '../../perception/scripts/')
-
-
 to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
 STOP_THRESHOLD_DISTANCE = 10 # meters
-RATE = 10 # Hz
+DEFAULT_RATE = 100 # Hz
 
 LANE_WIDTH = 1.5
 LEFT = -1
@@ -159,16 +154,19 @@ class Controller(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <parameter-file>")
+        print(f"Usage : {sys.argv[0]} <parameter-file> <publish-rate (optional)>")
     else:
         with open(sys.argv[1], "r") as parameterfile:
             config = yaml.load(parameterfile, yaml.Loader)
 
         rospy.init_node("decision")
+        publishing_rate = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].isdigit() else DEFAULT_RATE
+        rospy.loginfo(f"Publishing rate: {publishing_rate} Hz")
         node = Controller(config)
         rospy.loginfo(f"ACTION: START NAVIGATION")
         node.toogle_navigation()
-        rate = rospy.Rate(RATE)
+
+        rate = rospy.Rate(publishing_rate)
         while not rospy.is_shutdown():
             node.publish_control_inputs()
             rate.sleep()

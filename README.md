@@ -13,8 +13,11 @@ catkin_make
 ### Usage
 Run at the root dir (the one with src/ build/ etc ...)  :
 ```sh
+# launch ros
 roscore
-simulator # launch utac simulator
+# launch utac simulator
+simulator 
+# launch percepetion node
 rosrun perception perception_core.py src/config-utac.yml 
     --rviz # publish on visuzalition topic 
     --lidar-projection # !! only for visualization purpuse 
@@ -24,19 +27,6 @@ rosrun perception perception_core.py src/config-utac.yml
     --use-map # use structural map to filer out object not on the road
     --no-lights # disable lights detection (for better performance)
     --backward-camera # add backward camera in perception pipeline
-```
-
-### ONNX model generation
-> ONNX is an open standard format for representing machine learning models. Needed by opencv (spare torch usage)
-```bash
-# Clone the repository. 
-git clone https://github.com/ultralytics/YOLOv5
- 
-cd YOLOv5 # Install dependencies.
-pip install -r requirements.txt
-pip install onnx
- 
-# Download .pt model.
-wget https://github.com/ultralytics/YOLOv5/releases/download/v6.1/YOLOv5n.pt
-python export.py --weights models/YOLOv5n.pt --include onn --imgsz 416 416 --simplify --opset 11
+# launch decision node
+rosrun decision decision.py src/config-utac.yml 100 # 100Hz = publishing control input frequency (need adjustments depending on the computer computing capacity)
 ```
