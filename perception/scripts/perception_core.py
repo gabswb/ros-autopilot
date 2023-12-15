@@ -183,33 +183,33 @@ class Perception(object):
         label += str(self.classes[class_id])
         if d is not None:
             label += f": {d:.2f}m"
+        
+        # draw bouding box
         color = self.COLORS[class_id]
         cv2.rectangle(img, (x,y), (x_plus_w,y_plus_h), color, 2)
-
-        if class_id in HAS_LIGHT and DISPLAY_LIGHT_BBOX and self.detect_lights:
+        
+        # draw blinkers
+        if left_blink or right_blink:
             l_x = x_plus_w - x
             l_y = y_plus_h - y
 
             y_min = y + int(l_y * BLINK_HEIGHT[0])
             y_max = y + int(l_y * BLINK_HEIGHT[1])
 
-            x_min_left = x + int(l_x * LEFT_BLINK[0])
-            x_max_left = x + int(l_x * LEFT_BLINK[1])
+            if left_blink:
+                x_min_left = x + int(l_x * LEFT_BLINK[0])
+                x_max_left = x + int(l_x * LEFT_BLINK[1])
+                cv2.rectangle(img, (x_min_left,y_min), (x_max_left,y_max), (255, 0, 0), 1)
+            
+            if right_blink:
+                x_min_right = x + int(l_x * RIGHT_BLINK[0])
+                x_max_right = x + int(l_x * RIGHT_BLINK[1])
+                cv2.rectangle(img, (x_min_right,y_min), (x_max_right,y_max), (255, 0, 0), 1)
 
-            x_min_right = x + int(l_x * RIGHT_BLINK[0])
-            x_max_right = x + int(l_x * RIGHT_BLINK[1])
-
-            cv2.rectangle(img, (x_min_left,y_min), (x_max_left,y_max), (255, 0, 0), 1)
-            cv2.rectangle(img, (x_min_right,y_min), (x_max_right,y_max), (255, 0, 0), 1)
-
+        # print label and instance id
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
-        # if left_blink:
-        #     cv2.putText(img, "L Blink", (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-        # if right_blink:
-        #     cv2.putText(img, "R Blink", (x_plus_w - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
+        # print lane side
         lane_side = self.map_handler.get_lane_side(object)
         cv2.putText(img, lane_side, (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
