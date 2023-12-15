@@ -2,16 +2,24 @@ import sys
 import json
 import yaml
 import numpy as np
+from enum import Enum
 import matplotlib.pyplot as plt
 
 import rospy
 
-colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+class lane_side(str, Enum):
+	FRONT = "front"
+	LEFT = "left"
+	RIGHT = "right"
+	AWAY = "away"
 
 class MapHandler(object):
-	def __init__(self, road_network_file):
-		with open(road_network_file, 'r') as f:
+	def __init__(self, config):
+		self.config = config
+		with open(self.config["map"]["road-network-path"], 'r') as f:
 				self.road_network = json.load(f)
+		self.lane_width = self.config["map"]["lane-width"]
+		
 		self.left_boundaries_x = []
 		self.left_boundaries_y = []
 		self.right_boundaries_x = []
@@ -25,18 +33,28 @@ class MapHandler(object):
 		# self.cid = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
 
 		# self.plot_road()
-
-	def on_click(self, event):
-		pass
-		# # Extract the clicked coordinates
-		# x, y = event.xdata, event.ydata
-		# print(f"prev_x={self.prev_x}, prev_y={self.prev_y}")
-		# print(f"x={x}, y={y}")
-
-		# res = self.are_points_on_same_segment(self.prev_x, self.prev_y, x, y, self.road_network)
-		# print(f"res={res}")
-		# self.prev_x = x
-		# self.prev_y = y
+		
+	def get_lane_side(self, object):
+		if np.abs(object.x) <= self.lane_width/2 and object.z >= 0:
+			return lane_side.FRONT
+		elif object.x < -self.lane_width/2 and object.x >= -self.lane_width*3/2:
+			return lane_side.LEFT
+		elif object.x > self.lane_width/2 and object.x <= self.lane_width*3/2:
+			return lane_side.RIGHT
+		else:
+			return lane_side.AWAY
+		
+	def is_on_road(self, target_position):
+		'''Return true if target_position is on the road
+			- target_position: 2d-tuple (x,y)
+		'''
+		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in zip(self.left_boundaries_x, self.left_boundaries_y, self.right_boundaries_x, self.right_boundaries_y):
+			# Check if the point is within the bounding box of the road segment
+			for i in range(len(left_boundary_x) - 1):
+				if min(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) <= target_position[0] <= max(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) and \
+				min(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]) <= target_position[1] <= max(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]):
+					return True
+		return False
 
 	def process_road_network(self):
 		'''Return true if target_position is on the road
@@ -63,20 +81,6 @@ class MapHandler(object):
 			self.left_boundaries_y.append(py_values - (width / 2) * normal_y)
 			self.right_boundaries_x.append( px_values + (width / 2) * normal_x)
 			self.right_boundaries_y.append( py_values + (width / 2) * normal_y)
-			
-		
-	def is_on_road(self, target_position):
-		'''Return true if target_position is on the road
-			- target_position: 2d-tuple (x,y)
-		'''
-		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in zip(self.left_boundaries_x, self.left_boundaries_y, self.right_boundaries_x, self.right_boundaries_y):
-			# Check if the point is within the bounding box of the road segment
-			for i in range(len(left_boundary_x) - 1):
-				if min(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) <= target_position[0] <= max(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) and \
-				min(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]) <= target_position[1] <= max(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]):
-					return True
-		return False
-	
 	
 	def plot_road(self):
 		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in \
@@ -98,7 +102,21 @@ class MapHandler(object):
 		plt.show()
 
 
-	## DO NOT USE : debug function
+	# DO NOT USE : debug function
+	def on_click(self, event):
+		pass
+		# # Extract the clicked coordinates
+		# x, y = event.xdata, event.ydata
+		# print(f"prev_x={self.prev_x}, prev_y={self.prev_y}")
+		# print(f"x={x}, y={y}")
+
+		# res = self.are_points_on_same_segment(self.prev_x, self.prev_y, x, y, self.road_network)
+		# print(f"res={res}")
+		# self.prev_x = x
+		# self.prev_y = y
+
+
+	# DO NOT USE : debug function
 	def are_points_on_same_segment(self, x1, y1, x2, y2, road_data):
 		for segment in road_data:
 			geometry = segment["geometry"]
@@ -140,5 +158,5 @@ if __name__ == "__main__":
 		with open(sys.argv[1], "r") as config_file:
 			config = yaml.load(config_file, yaml.Loader)
 		rospy.init_node("distances")
-		node = MapHandler(config["node"]["road-network-path"])
+		node = MapHandler(config)
 		rospy.spin()
