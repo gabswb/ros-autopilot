@@ -1,3 +1,5 @@
 transforms3d
 ros-noetic-ros-numpy
 ultralytics
+PyYAML
+matplotlib
