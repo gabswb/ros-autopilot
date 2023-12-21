@@ -1,4 +1,3 @@
-
 topic:
   # autopilot topic
   object-info: /perception/objects            
@@ -11,35 +10,36 @@ topic:
   forward-right-lidar-viz: /perception/viz/forward_right_lidar
   forward-left-lidar-viz: /perception/viz/forward_left_lidar
   backward-lidar-viz: /perception/viz/backward_lidar
-  
+
   # car topic
-  forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
-  forward-camera-info: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]      
-  forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  
-  forward-left-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
-  forward-right-camera: /forwardRightCamera/image_raw                    # Front right camera topic                  :                       [Image]     
-  forward-right-camera-info: /forwardRightCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
-  backward-camera: /backwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
-  backward-camera-info: /backwardCamera/camera_info  
+  forward-camera: /zoe2/sensors/cameras/front_top/image_raw
+  forward-camera-info: /fzoe2/sensors/cameras/front_top/camera_info             # Front camera info topic             :                       [CameraInfo]      
+  # forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  
+  # forward-left-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
+  # forward-right-camera: /forwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  # forward-right-camera-info: /forwardCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
+  backward-camera: /zoe2/sensors/cameras/rear_top/image_raw                    # Front right camera topic                  :                       [Image]     
+  backward-camera-info: /zoe2/sensors/cameras/rear_top/camera_info 
   velocity: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
-  pointcloud: /lidar                                 # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
   control-refs-topic: /zoe2/control/refs 
+  pointcloud: /zoe2/sensors/lidars/middle            # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
   speed: /ZOE2UTBM/control/speed                     # Vehicle speed control topic         : control            ⟶ [Float32]
   speed-cap: /ZOE2UTBM/control/max_speed             # Vehicle speed cap topic             : control            ⟶ [Float32]
   steering-angle: /ZOE2UTBM/control/steering_angle   # Vehicle steering topic              : control            ⟶ [Float32]
   forward-camera-width: 1028
   forward-camera-height: 771
 
+
+service:
+  toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
+
 map:
   lane-width: 3.5                                         # Width of the lane in meters
   world-frame: map                                         # Fixed frame of reference
   car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
-  reference-frame: camera_forward_optical_frame
+  reference-frame: front_top_camera_optical_frame
   forward-camera-frame: camera_forward_optical_frame
   road-network-path: src/road_network.json  
-
-service:
-  toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
 
 model:
   detection-model-class-names-path: src/models/yolov8/classes.names
@@ -47,5 +47,5 @@ model:
   yolov8l-path: src/models/yolov8/yolov8l.pt
 
 feature:
-  navigation: True
-  controle-type: speed_and_steering_angle
+  navigation: False
+  controle-type: ControlRefs

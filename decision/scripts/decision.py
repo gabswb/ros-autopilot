@@ -33,6 +33,9 @@ class Controller(object):
         self.object_info_topic = self.config["topic"]["object-info"]
         self.toogle_navigation_service_name = self.config["service"]["toogle-navigation"]
         self.class_name_path = self.config["model"]["detection-model-class-names-path"]
+        self.navigation = self.config["feature"]["navigation"] 
+        self.control_type = self.config["feature"]["controle-type"]
+        self.control_ref_topic = self.config['topic']['control-refs-topic']
 
         # Situation states
         self.real_speed = None
@@ -59,10 +62,16 @@ class Controller(object):
         self.velocity_subscriber = rospy.Subscriber(self.velocity_topic, TwistStamped, self.callback_velocity)
 
         # Initialize the car control publishers
-        self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
-        self.steering_angle_publisher = rospy.Publisher(self.steering_angle, Float32, queue_size=10)
-        rospy.wait_for_service(self.toogle_navigation_service_name)
-        self.toogle_navigation_service = rospy.ServiceProxy(self.toogle_navigation_service_name, Empty)
+        if self.control_type == "ControlRefs":
+            from ros_zoe_msg import ControlRefs
+            self.control_refs_publisher = rospy.Publisher(self.control_ref_topic, ControlRefs, queue_size=10) 
+        else:
+            self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
+            self.steering_angle_publisher = rospy.Publisher(self.steering_angle, Float32, queue_size=10)
+
+        if self.navigation:
+            rospy.wait_for_service(self.toogle_navigation_service_name)
+            self.toogle_navigation_service = rospy.ServiceProxy(self.toogle_navigation_service_name, Empty)
         rospy.loginfo("Decision ready")
 
 
@@ -73,13 +82,25 @@ class Controller(object):
 
     def callback_velocity(self, data):
         """Callback called to get the real speed and angular speed from the velocity topic"""
-        # rospy.loginfo("Received a velocity")
         velocity_msg = data.twist
         velocity_x = velocity_msg.linear.x
         velocity_y = velocity_msg.linear.y
         self.real_speed = np.linalg.norm([velocity_x, velocity_y])
         self.real_angular_speed = velocity_msg.angular.z
-    
+
+    def publish_controls(self, speed = None, steering_angle = None):
+        if self.control_type == "ControlRefs":
+            from ros_zoe_msg import ControlRefs
+            ctrl = ControlRefs()
+            ctrl.steerAng = steering_angle
+            ctrl.linSpeed = speed
+            self.control_refs_publisher.publish(ctrl)
+        else:
+            if speed is not None:
+                self.speed_publisher.publish(speed)
+            if steering_angle is not None:
+                self.steering_angle_publisher.publish(steering_angle)
+
     def overtake(self, direction = 1):
         if not self.overtaking:
             rospy.loginfo(f"ACTION: STOP NAVIGATION")
@@ -91,21 +112,20 @@ class Controller(object):
         else:
             gap = rospy.get_time() - self.start_overtaking_time
             #rospy.loginfo(f"Gap: {gap:.2f}")
-            self.speed_publisher.publish(2)
             if gap < 2:
-                self.steering_angle_publisher.publish(0)
+                self.publish_controls(steering_angle=0, speed=2)
             elif gap < 5:
-                self.steering_angle_publisher.publish(self.overtaking_direction*20)
+                self.publish_controls(steering_angle=self.overtaking_direction*20, speed=2)
             elif gap < 7:
-                self.steering_angle_publisher.publish(-self.overtaking_direction*20)
+                self.publish_controls(steering_angle=-self.overtaking_direction*20, speed=2)
             elif gap < 10:
-                self.steering_angle_publisher.publish(0)
+                self.publish_controls(steering_angle=0, speed=2)
             elif gap < 12:
-                self.steering_angle_publisher.publish(-self.overtaking_direction*20)
+                self.publish_controls(steering_angle=-self.overtaking_direction*20, speed=2)
             elif gap < 15:
-                self.steering_angle_publisher.publish(self.overtaking_direction*20)
+                self.publish_controls(steering_angle=self.overtaking_direction*20, speed=2)
             elif gap < 17:
-                self.steering_angle_publisher.publish(0)
+                self.publish_controls(steering_angle=0, speed=2)
             else:
                 rospy.loginfo("INFO: overtaking finished")
                 self.overtaking = False
@@ -116,11 +136,14 @@ class Controller(object):
         return object.left_blink and object.right_blink
 
     def toogle_navigation(self,):
-        try:
-            _ = node.toogle_navigation_service()
-        except rospy.ServiceException as e:
-            pass
-
+        if self.navigation:
+            try:
+                _ = node.toogle_navigation_service()
+            except rospy.ServiceException as e:
+                pass
+        else:
+            self.publish_controls(speed=3,steering_angle=0)
+            
     def publish_control_inputs(self, ):
         """Publish the control inputs to the car"""
         # STOP CAR IF OBJECT IS TOO CLOSE
@@ -138,7 +161,7 @@ class Controller(object):
                         preceding_object = obj
                         if (obj.distance < STOP_THRESHOLD_DISTANCE*self.real_speed or obj.distance < STOP_THRESHOLD_DISTANCE):
                             rospy.loginfo(f"ACTION: STOP (object in front is too close)")
-                            self.speed_publisher.publish(0)
+                            self.publish_controls(speed=0, steering_angle=0)
 
         # START OVERTAKING FROM LEFT
         if preceding_object is not None:
@@ -160,7 +183,7 @@ if __name__ == "__main__":
             config = yaml.load(parameterfile, yaml.Loader)
 
         rospy.init_node("decision")
-        publishing_rate = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2].isdigit() else DEFAULT_RATE
+        publishing_rate = float(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else DEFAULT_RATE
         rospy.loginfo(f"Publishing rate: {publishing_rate} Hz")
         node = Controller(config)
         rospy.loginfo(f"ACTION: START NAVIGATION")

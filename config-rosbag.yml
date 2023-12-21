@@ -22,6 +22,7 @@ topic:
   backward-camera-info: /backwardCamera/camera_info 
   velocity: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
   pointcloud: /zoe2/sensors/lidars/middle            # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
+  control-refs-topic: /zoe2/control/refs 
   speed: /ZOE2UTBM/control/speed                     # Vehicle speed control topic         : control            ⟶ [Float32]
   speed-cap: /ZOE2UTBM/control/max_speed             # Vehicle speed cap topic             : control            ⟶ [Float32]
   steering-angle: /ZOE2UTBM/control/steering_angle   # Vehicle steering topic              : control            ⟶ [Float32]
@@ -43,3 +44,7 @@ model:
   detection-model-class-names-path: src/models/yolov8/classes.names
   yolov8n-path: src/models/yolov8/yolov8n.pt
   yolov8l-path: src/models/yolov8/yolov8l.pt
+
+feature:
+  navigation: False
+  controle-type: ControlRefs
