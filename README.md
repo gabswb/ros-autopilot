@@ -26,7 +26,7 @@ rosrun perception perception_core.py src/config-utac.yml
     --yolov8l # use yolov8l model for better accuracy
     --use-map # use structural map to filer out object not on the road
     --no-lights # disable lights detection (for better performance)
-    --backward-camera # add backward camera in perception pipeline
+    --only-front-camera # use only camera in perception pipeline
 # launch decision node
-rosrun decision decision.py src/config-utac.yml 100 # 100Hz = publishing control input frequency (need adjustments depending on the computer computing capacity)
+rosrun decision decision_core.py src/config-utac.yml 100 # 100Hz = publishing control input frequency (need adjustments depending on the computer computing capacity)
 ```

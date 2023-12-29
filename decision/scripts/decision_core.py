@@ -8,9 +8,13 @@ import rospy
 from std_msgs.msg import Float32, String, UInt8
 from std_srvs.srv import Empty
 from geometry_msgs.msg import TwistStamped
-from perception.msg import ObjectList, Object, ObjectBoundingBox
-from common_scripts.map_handler import MapHandler, lane_side
 
+from perception.msg import ObjectList, Object, ObjectBoundingBox
+from decision.msg import CameraActivation
+
+from common_scripts.map_handler import MapHandler, lane_side
+from decision_state import DECISION_STATE
+from controller import Controller
 
 to_not_kill = (0,1,2,3,4,5,6,7,8, 25) #person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
 STOP_THRESHOLD_DISTANCE = 10 # meters
@@ -21,8 +25,9 @@ LEFT = -1
 RIGHT = 1
 
 
-class Controller(object):
-    def __init__(self, config):
+
+class DecisionMaker(object):
+    def __init__(self, config, publishing_rate):
         self.config = config
 
         # Topics
@@ -36,11 +41,13 @@ class Controller(object):
         self.navigation = self.config["feature"]["navigation"] 
         self.control_type = self.config["feature"]["controle-type"]
         self.control_ref_topic = self.config['topic']['control-refs-topic']
+        self.camera_activation_topic = self.config['topic']['camera-activation']
 
         # Situation states
         self.real_speed = None
         self.real_angular_speed = None
         self.object_list = []
+        self.target_position = None
 
         # Overtaking states
         self.overtaking = False
@@ -55,29 +62,20 @@ class Controller(object):
         # Map handler
         self.map_handler = MapHandler(config)
 
+        # Controller 
+        self.controller = Controller(config)
+        self.camera_activation = rospy.Publisher(self.camera_activation_topic,CameraActivation,queue_size=10)
+
         # Initialize perception topic subscribers
         self.perception_subscriber = rospy.Subscriber(self.object_info_topic, ObjectList, self.callback_perception)
 
         # Initialize car topic subscribers
         self.velocity_subscriber = rospy.Subscriber(self.velocity_topic, TwistStamped, self.callback_velocity)
-
-        # Initialize the car control publishers
-        if self.control_type == "ControlRefs":
-            from ros_zoe_msg import ControlRefs
-            self.control_refs_publisher = rospy.Publisher(self.control_ref_topic, ControlRefs, queue_size=10) 
-        else:
-            self.speed_publisher = rospy.Publisher(self.speed_topic, Float32, queue_size=10)
-            self.steering_angle_publisher = rospy.Publisher(self.steering_angle, Float32, queue_size=10)
-
-        if self.navigation:
-            rospy.wait_for_service(self.toogle_navigation_service_name)
-            self.toogle_navigation_service = rospy.ServiceProxy(self.toogle_navigation_service_name, Empty)
         rospy.loginfo("Decision ready")
 
 
     def callback_perception(self, data):
         """Callback called to get the list of objects from the perception topic"""
-        # TODO not automatically remove list (add kalman filter or a confidence timing befor removing)
         self.object_list = data.object_list
 
     def callback_velocity(self, data):
@@ -87,67 +85,30 @@ class Controller(object):
         velocity_y = velocity_msg.linear.y
         self.real_speed = np.linalg.norm([velocity_x, velocity_y])
         self.real_angular_speed = velocity_msg.angular.z
-
-    def publish_controls(self, speed = None, steering_angle = None):
-        if self.control_type == "ControlRefs":
-            from ros_zoe_msg import ControlRefs
-            ctrl = ControlRefs()
-            ctrl.steerAng = steering_angle
-            ctrl.linSpeed = speed
-            self.control_refs_publisher.publish(ctrl)
-        else:
-            if speed is not None:
-                self.speed_publisher.publish(speed)
-            if steering_angle is not None:
-                self.steering_angle_publisher.publish(steering_angle)
-
-    def overtake(self, direction = 1):
-        if not self.overtaking:
-            rospy.loginfo(f"ACTION: STOP NAVIGATION")
-            self.toogle_navigation()
-            rospy.loginfo("ACTION: START OVERTAKING")
-            self.start_overtaking_time = rospy.get_time()
-            self.overtaking = True
-            self.overtaking_direction = direction
-        else:
-            gap = rospy.get_time() - self.start_overtaking_time
-            #rospy.loginfo(f"Gap: {gap:.2f}")
-            if gap < 2:
-                self.publish_controls(steering_angle=0, speed=2)
-            elif gap < 5:
-                self.publish_controls(steering_angle=self.overtaking_direction*20, speed=2)
-            elif gap < 7:
-                self.publish_controls(steering_angle=-self.overtaking_direction*20, speed=2)
-            elif gap < 10:
-                self.publish_controls(steering_angle=0, speed=2)
-            elif gap < 12:
-                self.publish_controls(steering_angle=-self.overtaking_direction*20, speed=2)
-            elif gap < 15:
-                self.publish_controls(steering_angle=self.overtaking_direction*20, speed=2)
-            elif gap < 17:
-                self.publish_controls(steering_angle=0, speed=2)
-            else:
-                rospy.loginfo("INFO: overtaking finished")
-                self.overtaking = False
-                rospy.loginfo(f"ACTION: START NAVIGATION")
-                self.toogle_navigation()
     
     def hazard_lights_on(self, object):
         return object.left_blink and object.right_blink
-
-    def toogle_navigation(self,):
-        if self.navigation:
-            try:
-                _ = node.toogle_navigation_service()
-            except rospy.ServiceException as e:
-                pass
-        else:
-            self.publish_controls(speed=3,steering_angle=0)
+    
+    def compute_path_for_overtaking(self, ):
+        # FIXME use kalman filter to predict/match position of overtaken car
+        # then compute path to overtake
+        target_position = [self.overtaken_car.x-LANE_WIDTH*1.5, self.overtaken_car.z-1]
+        return target_position
+    
+    def activate_camera(self, forward=True,forward_left=False,forward_right=False,backward=True):
+        cam_act = CameraActivation()
+        cam_act.forward = forward
+        cam_act.forward_left = forward_left
+        cam_act.forward_right = forward_right
+        cam_act.backward = backward
+        self.camera_activation.publish(cam_act) 
             
-    def publish_control_inputs(self, ):
-        """Publish the control inputs to the car"""
+    def decision_maker(self, ):
         # STOP CAR IF OBJECT IS TOO CLOSE
         objetct_on_left_line = []
+        objetct_on_right_line = []
+        current_state =  []
+        target_position = None
         preceding_object = None
         if not self.overtaking:
             for obj in self.object_list:
@@ -156,24 +117,36 @@ class Controller(object):
                     if obj_lane_side == lane_side.LEFT:
                         rospy.loginfo(f"INFO: Left lane {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                         objetct_on_left_line.append(obj)
-                    if obj_lane_side == lane_side.FRONT:
+                    elif obj_lane_side == lane_side.RIGHT:
+                        rospy.loginfo(f"INFO: Right lane {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
+                        objetct_on_right_line.append(obj)
+                    elif obj_lane_side == lane_side.FRONT:
                         rospy.loginfo(f"INFO: Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
                         preceding_object = obj
-                        if (obj.distance < STOP_THRESHOLD_DISTANCE*self.real_speed or obj.distance < STOP_THRESHOLD_DISTANCE):
-                            rospy.loginfo(f"ACTION: STOP (object in front is too close)")
-                            self.publish_controls(speed=0, steering_angle=0)
+                        if obj.distance < STOP_THRESHOLD_DISTANCE:
+                            current_state.append(DECISION_STATE.STOP)
+                        elif obj.distance < STOP_THRESHOLD_DISTANCE*self.real_speed:
+                            current_state.append(DECISION_STATE.ADAPT_TO_FORWARD_SPEED)
+
 
         # START OVERTAKING FROM LEFT
-        if preceding_object is not None:
-            if self.real_speed < 2 and self.hazard_lights_on(preceding_object):
+        if not self.overtaking and preceding_object is not None:
+            if self.real_speed < 1 and self.hazard_lights_on(preceding_object):
                 if len(objetct_on_left_line) == 0: 
-                    self.overtake(LEFT)
+                    self.overtaking = True
+                    self.overtaken_car = preceding_object
+                    current_state.append(DECISION_STATE.STOP_NAVIGATION)
+                    self.activate_camera(forward_right=True)
+                    self.target_position = self.compute_path_for_overtaking()
+                    print(self.target_position)
                 else:
                     rospy.loginfo('INFO: object on left line => cannot overtake')
         
-        # CONTINUE OVERTAKING IF 
-        if self.overtaking:
-            self.overtake()
+        # CONTINUE OVERTAKING IF STARTED
+        if self.overtaking == True:
+            current_state.append(DECISION_STATE.OVERTAKE)
+
+        self.controller.handle_decision(current_state, self.target_position, self.real_speed)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -185,13 +158,12 @@ if __name__ == "__main__":
         rospy.init_node("decision")
         publishing_rate = float(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else DEFAULT_RATE
         rospy.loginfo(f"Publishing rate: {publishing_rate} Hz")
-        node = Controller(config)
-        rospy.loginfo(f"ACTION: START NAVIGATION")
-        node.toogle_navigation()
+        node = DecisionMaker(config, publishing_rate)
+        node.controller.handle_decision([DECISION_STATE.START_NAVIGATION])
 
         rate = rospy.Rate(publishing_rate)
         while not rospy.is_shutdown():
-            node.publish_control_inputs()
+            node.decision_maker()
             rate.sleep()
 
         rospy.spin()
