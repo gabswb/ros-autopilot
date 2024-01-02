@@ -176,7 +176,7 @@ class Perception(object):
         if self.time_statistics:
             rospy.loginfo(f"Distance extraction time: {time.time() - start:.2f}")    
         
-        if self.detect_lights and image_data.header.frame_id == "forward_camera":
+        if self.detect_lights:
             if self.time_statistics:
                 start = time.time()
             objects = self.vehicle_light_detector.check_lights(image, objects)
