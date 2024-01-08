@@ -49,8 +49,6 @@ class Perception(object):
         self.forward_right_camera = False
         self.backward_camera = True
 
-        # Decision reception module
-        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-lidar-viz"], self.lidar_projection, self.use_map)
 
 
         # Publisher
