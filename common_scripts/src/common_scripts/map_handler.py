@@ -6,6 +6,8 @@ from enum import Enum
 import matplotlib.pyplot as plt
 
 import rospy
+import tf2_ros
+import transforms3d.quaternions as quaternions
 
 class lane_side(str, Enum):
 	FRONT = "front"
@@ -26,6 +28,8 @@ class MapHandler(object):
 		self.right_boundaries_y = []
 
 		self.process_road_network()
+		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
+		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
 		# self.prev_x = 0
 		# self.prev_y = 0
@@ -149,6 +153,32 @@ class MapHandler(object):
 				return True
 
 		return False
+	
+	def get_transform(self, source_frame, target_frame):
+		"""Update the lidar-to-camera transform matrix from the tf topic"""
+		try:
+			# It’s lookup_transform(target_frame, source_frame, …) !!!
+			transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rospy.Time(0))
+		except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+			print('error')
+			return
+
+		# Build the matrix elements
+		rotation_message = transform.transform.rotation
+		rotation_quaternion = np.asarray((rotation_message.w, rotation_message.x, rotation_message.y, rotation_message.z))
+		rotation_matrix = quaternions.quat2mat(rotation_quaternion)
+		translation_message = transform.transform.translation
+		translation_vector = np.asarray((translation_message.x, translation_message.y, translation_message.z)).reshape(3, 1)
+		
+		# Build the complete transform matrix
+		return np.concatenate((
+			np.concatenate((rotation_matrix, translation_vector), axis=1),
+			np.asarray((0, 0, 0, 1)).reshape((1, 4))
+		), axis=0)
+
+	def get_world_position(self,car_baslink = np.array([0, 0, 0, 1])):
+		baslink_to_map = self.get_transform("base_link", self.config["map"]["world-frame"])
+		return (baslink_to_map @ car_baslink.T)[:2]
 			
 
 if __name__ == "__main__":
