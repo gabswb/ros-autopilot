@@ -59,7 +59,7 @@ class MapPlotter(object):
 
 		return self.ln, self.obj_scatter
 
-	def update_map(self, data):
+	def perception_callback(self, data):
 		self.car_position = self.get_world_position(np.array([0,0,0,1]))
 
 		self.objects_position = []
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 			config = yaml.load(config_file, yaml.Loader)
 		rospy.init_node("map_plotter")
 		node = MapPlotter(config)
-		sub = rospy.Subscriber(config["topic"]["object-info"], ObjectList, node.update_map)
+		sub = rospy.Subscriber(config["topic"]["object-info"], ObjectList, node.perception_callback)
 		ani = FuncAnimation(node.fig, node.update_plot, init_func=node.plot_init)
 		plt.show(block=True)  # Display the initial plot
 		rospy.spin()
