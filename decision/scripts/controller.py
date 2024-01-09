@@ -47,9 +47,10 @@ class Controller(object):
         self.overtaking_direction = -1
 
         # pure pursuit parameters
-        self.k = 4
-        self.min_ld = 1
-        self.max_ld = 15
+        self.k = 0.1
+        self.LFC = 5
+        self.min_ld = 2
+        self.max_ld = 5
         self.L = 2.588  # distance between wheels
 
         # Initialize the car control publishers
@@ -61,17 +62,18 @@ class Controller(object):
             self.toogle_navigation_service = rospy.ServiceProxy(self.toogle_navigation_service_name, Empty)
         rospy.loginfo("Controller ready")
 
-    def publish_controls(self, speed=None, steering_angle=None):
-        if speed is not None:
-            self.speed_publisher.publish(speed)
-        if steering_angle is not None:
-            self.steering_angle_publisher.publish(steering_angle)
+    def publish_controls(self, speed, steering_angle):
+        if speed is None or steering_angle is None:
+            raise Exception("Speed or steering angle is None")
+        self.speed_publisher.publish(speed)
+        self.steering_angle_publisher.publish(steering_angle)
 
     def pure_pursuit_controls(self, target_position, speed):
         if target_position is not None:
-            # l_d = np.linalg.norm(target_position)
-            l_d = np.clip(self.k * speed, self.min_ld, self.max_ld)
-            alpha = np.arctan2(target_position[0], target_position[1])
+            speed = speed or 1 # sometimes speed is None
+            # l_d = np.linalg.norm([target_position[0], target_position[2]])
+            l_d = self.k * speed + self.LFC
+            alpha = np.arctan2(target_position[0], target_position[2])
             steering_angle = np.arctan2(2 * self.L * np.sin(alpha), l_d)
             self.last_steering_angle = steering_angle * 180 / np.pi
         return self.last_steering_angle
@@ -86,47 +88,9 @@ class Controller(object):
         else:
             self.publish_controls(speed=3,steering_angle=0) # FIXME useless
             
-    def handle_decision(self, states:DECISION_STATE, target_position = None, speed = None):
-        for state in states:
-            if state == DECISION_STATE.STOP:
-                rospy.loginfo(f"ACTION: STOP (object in front is too close)")
-                self.publish_controls(speed=0, steering_angle=0)
-
-            elif state == DECISION_STATE.ADAPT_TO_FORWARD_SPEED:
-                rospy.loginfo(f"ACTION: SLOW DOWN (object in front is too close)")
-                self.publish_controls(speed=0, steering_angle=0)
-
-            elif state == DECISION_STATE.START_NAVIGATION:
-                if self.navigation:
-                    rospy.loginfo("INFO: navigation already started")
-                else:
-                    rospy.loginfo("ACTION: START NAVIGATION")
-                    self.toogle_navigation()
-                    self.navigation = True
-
-            elif state == DECISION_STATE.STOP_NAVIGATION:
-                if not self.navigation:
-                    rospy.loginfo("INFO: navigation already stopped")
-                else:
-                    rospy.loginfo("ACTION: STOP NAVIGATION")
-                    self.toogle_navigation()
-                    self.navigation = False
-
-            elif state == DECISION_STATE.REACH_TARGET:
-                steering_angle = self.pure_pursuit_controls(target_position, current_speed)
-                self.publish_controls(steering_angle=steering_angle, speed=target_speed)
-
-            elif state == DECISION_STATE.PANIC_MODE:
-                rospy.loginfo(f"ACTION: PANIC MODE STOP")
-                self.publish_controls(speed=0, steering_angle=0)
-
-            elif state == DECISION_STATE.DONE:
-                rospy.loginfo(f"SCENARIO DONE")
-                self.publish_controls(speed=0, steering_angle=0)
-
-            else:
-                rospy.loginfo(f"ERROR: unknown state {state}")
-
+    def handle_decision(self, target_position, target_speed, current_speed = None):            
+        steering_angle = self.pure_pursuit_controls(target_position, current_speed)
+        self.publish_controls(steering_angle=steering_angle, speed=target_speed)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

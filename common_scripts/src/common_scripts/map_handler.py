@@ -158,9 +158,9 @@ class MapHandler(object):
 		"""Update the lidar-to-camera transform matrix from the tf topic"""
 		try:
 			# It’s lookup_transform(target_frame, source_frame, …) !!!
-			transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rospy.Time(0))
+			transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rospy.Time(0), rospy.Duration(1.0))
 		except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
-			print('error')
+			rospy.logerr('Transform not found')
 			return
 
 		# Build the matrix elements
