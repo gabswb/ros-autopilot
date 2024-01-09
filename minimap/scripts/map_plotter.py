@@ -13,6 +13,9 @@ import transforms3d.quaternions as quaternions
 
 from perception.msg import ObjectList, Object, ObjectBoundingBox
 
+WINDOW_SIZE_X = 50
+WINDOW_SIZE_X = 50
+
 
 class MapPlotter(object):
 	def __init__(self, config):
@@ -35,33 +38,36 @@ class MapPlotter(object):
 
 		self.fig, self.ax = plt.subplots()
 		self.ln, = plt.plot([], [], 'ro')
+		self.obj_scatter = None
 
 
 	def update_plot(self, frame):
-		# rospy.loginfo("update_plot")
-		# self.ax.clear()
-		# self.ax.plot(self.car_position[0], self.car_position[1], 'ro')
-		# for obj_pos in self.objects_position:
-		# 	self.ax.plot(obj_pos[0], obj_pos[2], 'bo')
-		# return self.ln
+
+		x = self.car_position[0]
+		y = self.car_position[1]
+		self.ax.set_xlim(x-WINDOW_SIZE_X//2, x+WINDOW_SIZE_X//2)
+		self.ax.set_ylim(y-WINDOW_SIZE_X//2, y+WINDOW_SIZE_X//2)
+		self.ax.set_aspect('equal')
+		self.ln.set_data(x, y)
 		
-		# Update the car position
-		self.ln.set_data(self.car_position[0], self.car_position[1])
-		
+		if self.obj_scatter is not None and self.obj_scatter in self.ax.collections:
+			self.obj_scatter.remove()
+		if self.objects_position:
+			obj_positions = np.array(self.objects_position)
+			self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='blue', marker='o', label='Objects')
 
 
-		# Optionally, you can also update other elements if needed
-
-		return self.ln,
+		return self.ln, self.obj_scatter
 
 	def update_map(self, data):
 		self.car_position = self.get_world_position(np.array([0,0,0,1]))
+
+		self.objects_position = []
+		print(len(data.object_list))
 		for obj in data.object_list:
 			obj_pos = self.get_world_position(np.array([obj.x, obj.y, obj.z, 1]))
 			self.objects_position.append(obj_pos)
 			
-		rospy.loginfo("update_map")
-
 
 	def plot_init(self):
 		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in \
