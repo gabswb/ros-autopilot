@@ -176,9 +176,15 @@ class MapHandler(object):
 			np.asarray((0, 0, 0, 1)).reshape((1, 4))
 		), axis=0)
 
-	def get_world_position(self,car_baslink = np.array([0, 0, 0, 1])):
-		baslink_to_map = self.get_transform("base_link", self.config["map"]["world-frame"])
-		return (baslink_to_map @ car_baslink.T)[:2]
+	def get_world_position(self,car_baslink = np.array([0, 0, 0])):
+		baslink_to_map = self.get_transform("camera_forward_optical_frame", self.config["map"]["world-frame"])
+		position = baslink_to_map @ np.concatenate((car_baslink, np.array([1]))).T
+		return (position/position[3])[:3]
+	
+	def get_car_world_position(self, world_position):
+		map_to_baslink = self.get_transform(self.config["map"]["world-frame"], "camera_forward_optical_frame")
+		position = map_to_baslink @ np.concatenate((world_position, np.array([1]))).T
+		return (position/position[3])[:3]
 			
 
 if __name__ == "__main__":
