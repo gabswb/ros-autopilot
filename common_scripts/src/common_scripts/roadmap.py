@@ -320,6 +320,7 @@ class MapHandler(object):
                 self.ax.plot(x_right, y_right, linestyle='-', color='black')
         plt.xlabel('X-axis')
         plt.ylabel('Y-axis')
+        
         plt.title('Road Visualization')
         plt.axis('equal')
         plt.show()
