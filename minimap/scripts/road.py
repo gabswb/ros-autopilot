@@ -1,19 +1,5 @@
-import sys
-import json
-import yaml
 import numpy as np
-from enum import Enum
-import matplotlib.pyplot as plt
 import itertools
-import time
-
-colors = ["g", "r", "orange", "y", "black", "m", "cyan", "magenta"]
-
-class lane_side(str, Enum):
-    FRONT = "front"
-    LEFT = "left"
-    RIGHT = "right"
-    AWAY = "away"
 
 
 class Road():
@@ -193,146 +179,14 @@ class Road():
                                          (px_values[i] + (width / 2) * normal_x[i],
                                           py_values[i] + (width / 2) * normal_y[i]))
 
+def get_angle(a, b, c):
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
 
-class MapHandler(object):
-    def __init__(self):
-        with open('../../../road_network.json', 'r') as f:
-            self.road_network = json.load(f)
-        self.lane_width = 3.5
+    ba = a - b
+    bc = c - b
 
-        self.segment_dict = {}
-        self.road_list = []
-        self.path = []
+    angle = np.arctan2(np.cross(ba, bc), np.dot(ba, bc))
 
-        self.process_road_network()
-        self.create_path()
-
-        self.fig, self.ax = plt.subplots()
-
-        self.plot_road()
-
-    def assign_segment_to_road(self, segment, road_id):
-        self.segment_dict[segment["guid"]] = road_id
-
-    def is_segment_assigned(self, segment_guid):
-        segments_assigned = list(self.segment_dict.keys())
-        if segment_guid not in segments_assigned:
-            return False
-        else:
-            return self.segment_dict[segment_guid]
-
-    def get_segment(self, segment_guid):
-        for segment in self.road_network:
-            if segment["guid"] == segment_guid:
-                return segment
-
-    def get_road(self, segment):
-        for road in self.road_list:
-            if segment in road.segment_list:
-                return road
-
-    def get_lane_side(self, object):
-        if np.abs(object.x) <= self.lane_width / 2 and object.z >= 0:
-            return lane_side.FRONT
-        elif object.x < -self.lane_width / 2 and object.x >= -self.lane_width * 3 / 2:
-            return lane_side.LEFT
-        elif object.x > self.lane_width / 2 and object.x <= self.lane_width * 3 / 2:
-            return lane_side.RIGHT
-        else:
-            return lane_side.AWAY
-
-    def is_on_road(self, target_position):
-        '''Return true if target_position is on the road
-            - target_position: 2d-tuple (x,y)
-        '''
-        for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in zip(self.left_boundaries_x,
-                                                                                        self.left_boundaries_y,
-                                                                                        self.right_boundaries_x,
-                                                                                        self.right_boundaries_y):
-            # Check if the point is within the bounding box of the road segment
-            for i in range(len(left_boundary_x) - 1):
-                if min(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1], right_boundary_x[i + 1]) <= \
-                        target_position[0] <= max(left_boundary_x[i], right_boundary_x[i], left_boundary_x[i + 1],
-                                                  right_boundary_x[i + 1]) and \
-                        min(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1], right_boundary_y[i + 1]) <= \
-                        target_position[1] <= max(left_boundary_y[i], right_boundary_y[i], left_boundary_y[i + 1],
-                                                  right_boundary_y[i + 1]):
-                    return True
-        return False
-
-    def process_road_network(self):
-        for i in range(len(self.road_network)):
-            if self.is_segment_assigned(self.road_network[i]["guid"]) is False:
-                Road(self, self.road_network[i])
-
-    def get_road_position(self, position):
-        for road in self.road_list:
-            for i in range(len(road.path_to_follow) - 1):
-                x1, y1 = road.left_points[i]
-                x2, y2 = road.left_points[i+1]
-                x3, y3 = road.right_points[i]
-                x4, y4 = road.right_points[i+1]
-
-                x, y = position
-
-                is_in_quad = point_in_quad(x1, y1, x2, y2, x4, y4, x3, y3, x, y)
-
-                if is_in_quad:
-                    print(road.id)
-                    self.path.append(road)
-
-    def plot_road(self):
-        for i, road in enumerate(self.road_list):
-            if road.display:
-                x_left, y_left = zip(*road.left_points)
-                x_middle, y_middle = zip(*road.path_to_follow)
-                x_right, y_right = zip(*road.right_points)
-
-                # Tracer le graphique
-                self.ax.plot(x_left, y_left, linestyle='-', color='black')
-                if road in self.path:
-                    if road == self.path[0]:
-                        self.ax.plot(x_middle, y_middle, linestyle='-', color='red')
-                    else:
-                        self.ax.plot(x_middle, y_middle, linestyle='-', color='blue')
-                self.ax.plot(x_right, y_right, linestyle='-', color='black')
-        plt.xlabel('X-axis')
-        plt.ylabel('Y-axis')
-        
-        plt.title('Road Visualization')
-        plt.axis('equal')
-        plt.show()
-
-    def create_path(self):
-        first_road = self.road_list[59]
-        second_road = first_road.forwardRoad
-        third_road = second_road.leftRoad
-        fourth_road = third_road.forwardRoad
-
-        self.path.append(first_road)
-        self.path.append(second_road)
-        self.path.append(third_road)
-        self.path.append(fourth_road)
-
-
-
-
-def vect_product(x1, y1, x2, y2, x3, y3):
-    return (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
-
-
-def point_in_quad(ax, ay, bx, by, cx, cy, dx, dy, px, py):
-    orientation_AB_AP = vect_product(ax, ay, bx, by, px, py)
-    orientation_BC_BP = vect_product(bx, by, cx, cy, px, py)
-    orientation_CD_CP = vect_product(cx, cy, dx, dy, px, py)
-    orientation_DA_DP = vect_product(dx, dy, ax, ay, px, py)
-
-    if (orientation_AB_AP > 0 and orientation_BC_BP > 0 and orientation_CD_CP > 0 and orientation_DA_DP > 0) or \
-            (orientation_AB_AP < 0 and orientation_BC_BP < 0 and orientation_CD_CP < 0 and orientation_DA_DP < 0):
-        return True
-    else:
-        return False
-
-
-if __name__ == "__main__":
-    node = MapHandler()
+    return angle

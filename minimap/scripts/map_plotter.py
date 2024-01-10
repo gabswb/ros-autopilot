@@ -13,6 +13,7 @@ import transforms3d.quaternions as quaternions
 
 from perception.msg import ObjectList, Object, ObjectBoundingBox
 from decision.msg import DecisionInfo
+from road import Road
 
 WINDOW_SIZE_X = 75
 WINDOW_SIZE_Y = 75
@@ -23,14 +24,15 @@ class MapPlotter(object):
 		self.config = config
 
 		with open(self.config["map"]["road-network-path"], 'r') as f:
-				self.road_network = json.load(f)
-		
-		self.left_boundaries_x = []
-		self.left_boundaries_y = []
-		self.right_boundaries_x = []
-		self.right_boundaries_y = []
+			self.road_network = json.load(f)
+
+		self.segment_dict = {}
+		self.road_list = []
+		self.path = []
 
 		self.process_road_network()
+		self.create_path()
+
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
@@ -64,7 +66,6 @@ class MapPlotter(object):
 			targets = np.array(self.targets)
 			self.ax.scatter(targets[:, 0], targets[:, 1], c='red', marker='X', label='Targets')
 
-
 		return self.ln, self.obj_scatter
 
 	def perception_callback(self, data):
@@ -74,21 +75,49 @@ class MapPlotter(object):
 			obj_pos = self.get_world_position(np.array([obj.x, obj.y, obj.z, 1]))
 			self.objects_position.append(obj_pos)
 
-
 	def decision_callback(self, data):
 		self.targets = []
 		for target in [data.target1, data.target2, data.target3, data.target4, data.target5]:
 			if len(target) > 0:
 				self.targets.append(target)
 
-	def plot_init(self):
-		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in \
-			zip(self.left_boundaries_x, self.left_boundaries_y, self.right_boundaries_x, self.right_boundaries_y):
+	def assign_segment_to_road(self, segment, road_id):
+		self.segment_dict[segment["guid"]] = road_id
 
-			self.ax.plot(left_boundary_x, left_boundary_y, color='black')
-			self.ax.plot(right_boundary_x, right_boundary_y, color='black')
+	def is_segment_assigned(self, segment_guid):
+		segments_assigned = list(self.segment_dict.keys())
+		if segment_guid not in segments_assigned:
+			return False
+		else:
+			return self.segment_dict[segment_guid]
+
+	def get_segment(self, segment_guid):
+		for segment in self.road_network:
+			if segment["guid"] == segment_guid:
+				return segment
+
+	def get_road(self, segment):
+		for road in self.road_list:
+			if segment in road.segment_list:
+				return road
+
+	def plot_init(self):
+		for i, road in enumerate(self.road_list):
+			if road.display:
+				x_left, y_left = zip(*road.left_points)
+				x_middle, y_middle = zip(*road.path_to_follow)
+				x_right, y_right = zip(*road.right_points)
+
+				# Tracer le graphique
+				self.ax.plot(x_left, y_left, linestyle='-', color='black')
+				if road in self.path:
+					if road == self.path[0]:
+						self.ax.plot(x_middle, y_middle, linestyle='-', color='red')
+					else:
+						self.ax.plot(x_middle, y_middle, linestyle='-', color='blue')
+				self.ax.plot(x_right, y_right, linestyle='-', color='black')
+
 		return self.ln  
-		
 
 	def get_transform(self, source_frame, target_frame):
 		"""Update the lidar-to-camera transform matrix from the tf topic"""
@@ -116,33 +145,21 @@ class MapPlotter(object):
 		return (reference_to_map @ position.T)[:3]
 
 	def process_road_network(self):
-		'''Return true if target_position is on the road
-			- target_position: 2d-tuple (x,y)
-		'''
-		for segment in self.road_network:
-			geometry = segment["geometry"]
-			px_values = [point["px"] for point in geometry]
-			py_values = [point["py"] for point in geometry]
-			tx_values = [point["tx"] for point in geometry]
-			ty_values = [point["ty"] for point in geometry]
-			width = segment["geometry"][0]["width"]
+		for i in range(len(self.road_network)):
+			if self.is_segment_assigned(self.road_network[i]["guid"]) is False:
+				Road(self, self.road_network[i])
 
-			# Calculate perpendicular vectors to represent the road boundaries
-			normal_x = np.array([-ty for ty in ty_values])
-			normal_y = np.array([tx for tx in tx_values])
+	def create_path(self):
+		first_road = self.road_list[59]
+		second_road = first_road.forwardRoad
+		third_road = second_road.leftRoad
+		fourth_road = third_road.forwardRoad
 
-			norm = np.sqrt(normal_x**2 + normal_y**2)
-			normal_x /= norm
-			normal_y /= norm
-
-			# Calculate road boundaries
-			self.left_boundaries_x.append(px_values - (width / 2) * normal_x)
-			self.left_boundaries_y.append(py_values - (width / 2) * normal_y)
-			self.right_boundaries_x.append( px_values + (width / 2) * normal_x)
-			self.right_boundaries_y.append( py_values + (width / 2) * normal_y)
+		self.path.append(first_road)
+		self.path.append(second_road)
+		self.path.append(third_road)
+		self.path.append(fourth_road)
 		
-
-			
 
 if __name__ == "__main__":
 	if len(sys.argv) < 2:
