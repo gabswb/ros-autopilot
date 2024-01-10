@@ -30,7 +30,7 @@ class MapPlotter(object):
         self.car_position = self.map_handler.get_world_position(np.array([0, 0, 0]))
 
         self.fig, self.ax = plt.subplots()
-        self.ln, = plt.plot([], [], '<')
+        self.ln, = plt.plot([], [], 'bD' )
         self.obj_scatter = None
         self.target_scatter = None
         self.rectangle_scatter = []
@@ -60,7 +60,7 @@ class MapPlotter(object):
             self.obj_scatter.remove()
         if self.objects_position:
             obj_positions = np.array(self.objects_position)
-            self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='blue', marker='D',
+            self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='r', marker='o',
                                                label='Objects')
 
         for road_id, available in self.road_to_check.items():
@@ -79,7 +79,7 @@ class MapPlotter(object):
 
         if len(self.targets) > 0:
             targets = np.array(self.targets)
-            self.target_scatter = self.ax.scatter(targets[:, 0], targets[:, 1], c='red', marker='X', label='Targets')
+            self.target_scatter = self.ax.scatter(targets[:, 0], targets[:, 1], c='cornflowerblue', marker='X', label='Targets')
 
         return self.ln, self.obj_scatter
 
