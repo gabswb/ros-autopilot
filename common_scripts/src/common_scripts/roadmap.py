@@ -5,9 +5,9 @@ import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
 import itertools
+import time
 
 colors = ["g", "r", "orange", "y", "black", "m", "cyan", "magenta"]
-
 
 class lane_side(str, Enum):
     FRONT = "front"
@@ -24,20 +24,22 @@ class Road():
         self.segment_list = []
 
         self.left_points = []
+        self.path_to_follow = []
         self.right_points = []
 
         self.oppositeRoad = None
         self.leftRoad = None
         self.forwardRoad = None
         self.rightRoad = None
+        self.previous_road_list = []
 
         self.display = True
 
         self.road_network = map_handler.road_network
         self.map_handler = map_handler
 
+        self.map_handler.road_list.append(self)
         self.find_other_segments(first_segment)
-        print(self.segment_list)
 
     def find_other_segments(self, first_segment):
         # segments_id = [segment["guid"] for segment in self.road_network]
@@ -52,7 +54,10 @@ class Road():
             if segment_road is False:
                 previous_segment_guid = previous_segment["previous"][0]
                 previous_segment = self.map_handler.get_segment(previous_segment_guid)
-                self.add_segment_to_road(previous_segment, "previous")
+                if len(previous_segment["next"]) == 1:
+                    self.add_segment_to_road(previous_segment, "previous")
+                else:
+                    break
             else:
                 break
 
@@ -61,8 +66,17 @@ class Road():
             if segment_road is False:
                 next_segment_guid = next_segment["next"][0]
                 next_segment = self.map_handler.get_segment(next_segment_guid)
-                self.add_segment_to_road(next_segment, "next")
+                if len(next_segment["previous"]) > 1:
+                    new_road = Road(self.map_handler, next_segment)
+                    self.forwardRoad = new_road
+                    self.forwardRoad.previous_road_list.append(self)
+                    return
+                else:
+                    self.add_segment_to_road(next_segment, "next")
             else:
+                forward_road = self.map_handler.get_road(next_segment["next"][0])
+                self.forwardRoad = forward_road
+                self.forwardRoad.previous_road_list.append(self)
                 break
 
         if len(next_segment["next"]) >= 2:
@@ -95,22 +109,52 @@ class Road():
             abs_angle_list = [abs(ele) for ele in angle_list]
             forward_idx = abs_angle_list.index(min(abs_angle_list))
 
+            # print(self.forwardRoad)
             if self.map_handler.is_segment_assigned(intersection_segment_list[forward_idx]["guid"]) is False:
                 forward_road = Road(self.map_handler, intersection_segment_list[forward_idx])
-                self.map_handler.road_list.append(forward_road)
+                # self.map_handler.road_list.append(forward_road)
                 self.forwardRoad = forward_road
-                angle_list.pop(forward_idx)
+                self.forwardRoad.previous_road_list.append(self)
+            else:
+                forward_road = self.map_handler.get_road(intersection_segment_list[forward_idx]["guid"])
+                self.forwardRoad = forward_road
+                if self not in self.forwardRoad.previous_road_list:
+                    self.forwardRoad.previous_road_list.append(self)
+            # print("---")
 
-            if len(angle_list) == 2:
-                if (angle_list[0] > 0 and angle_list[1] > 0) or (angle_list[0] < 0 and angle_list[1] < 0):
-                    print(point_list)
-                    print(angle_list)
+            for i in range(len(angle_list)):
+                if i == forward_idx:
+                    pass
+                elif angle_list[i] > 0:
+                    if self.map_handler.is_segment_assigned(intersection_segment_list[i]["guid"]) is False:
+                        right_road = Road(self.map_handler, intersection_segment_list[i])
+                        if self.rightRoad is not None:
+                            self.rightRoad = right_road
+                            self.rightRoad.previous_road_list.append(self)
+                        else:
+                            self.rightRoad = right_road
+                            self.rightRoad.previous_road_list.append(self)
+                    else:
+                        right_road = self.map_handler.get_road(intersection_segment_list[forward_idx]["guid"])
+                        self.rightRoad = right_road
+                        if self not in self.rightRoad.previous_road_list:
+                            self.rightRoad.previous_road_list.append(self)
 
-            # for i in range(len(angle_list)):
-            #     if i == forward_idx:
-            #
-            #
-
+                elif angle_list[i] < 0:
+                    if self.map_handler.is_segment_assigned(intersection_segment_list[i]["guid"]) is False:
+                        left_road = Road(self.map_handler, intersection_segment_list[i])
+                        # self.map_handler.road_list.append(left_road)
+                        if self.leftRoad is not None:
+                            self.leftRoad = left_road
+                            self.leftRoad.previous_road_list.append(self)
+                        else:
+                            self.leftRoad = left_road
+                            self.leftRoad.previous_road_list.append(self)
+                    else:
+                        left_road = self.map_handler.get_road(intersection_segment_list[forward_idx]["guid"])
+                        self.leftRoad = left_road
+                        if self not in self.leftRoad.previous_road_list:
+                            self.leftRoad.previous_road_list.append(self)
 
     def add_segment_to_road(self, segment, order):
         self.add_points(segment, order)
@@ -137,6 +181,7 @@ class Road():
             for i in range(len(px_values)):
                 self.left_points.append(
                     (px_values[i] - (width / 2) * normal_x[i], py_values[i] - (width / 2) * normal_y[i]))
+                self.path_to_follow.append((px_values[i], py_values[i]))
                 self.right_points.append(
                     (px_values[i] + (width / 2) * normal_x[i], py_values[i] + (width / 2) * normal_y[i]))
         elif order == "previous":
@@ -144,6 +189,7 @@ class Road():
                 self.left_points.insert(0,
                                         (px_values[i] - (width / 2) * normal_x[i],
                                          py_values[i] - (width / 2) * normal_y[i]))
+                self.path_to_follow.insert(0, (px_values[i], py_values[i]))
                 self.right_points.insert(0,
                                          (px_values[i] + (width / 2) * normal_x[i],
                                           py_values[i] + (width / 2) * normal_y[i]))
@@ -157,6 +203,7 @@ class MapHandler(object):
 
         self.segment_dict = {}
         self.road_list = []
+        self.path = []
 
         self.left_boundaries_x = []
         self.left_boundaries_y = []
@@ -168,7 +215,7 @@ class MapHandler(object):
         j = 0
         for i in range(len(self.road_network)):
             if self.is_segment_assigned(self.road_network[i]["guid"]) is False:
-                self.road_list.append(Road(self, self.road_network[i]))
+                Road(self, self.road_network[i])
                 j += 1
         # self.road_list.append(Road(self, self.road_network[3]))
         print(len(self.road_list))
@@ -195,24 +242,10 @@ class MapHandler(object):
             if segment["guid"] == segment_guid:
                 return segment
 
-    def merge_roads(self, old_road, new_road_id, position_to_merge):
-        new_road = None
+    def get_road(self, segment):
         for road in self.road_list:
-            if road.id == new_road_id:
-                new_road = road
-
-        if position_to_merge == "previous":
-            print("new road")
-            # print(old_road.segment_list)
-            # print(new_road.segment_list)
-
-            new_road.segment_list[:0] = old_road.segment_list
-            new_road.left_points[:0] = old_road.left_points
-            new_road.right_points[:0] = old_road.right_points
-            # print(new_road.segment_list)
-            # print("--------------")
-            #
-            # del old_road
+            if segment in road.segment_list:
+                return road
 
     def get_lane_side(self, object):
         if np.abs(object.x) <= self.lane_width / 2 and object.z >= 0:
@@ -270,30 +303,37 @@ class MapHandler(object):
             self.right_boundaries_y.append(py_values + (width / 2) * normal_y)
 
     def plot_road(self):
+        self.create_path()
         for i, road in enumerate(self.road_list):
             if road.display:
-                if len(road.segment_list) == 1:
-                    color = "b"
-                    x_left, y_left = zip(*road.left_points)
-                    x_right, y_right = zip(*road.right_points)
+                x_left, y_left = zip(*road.left_points)
+                x_middle, y_middle = zip(*road.path_to_follow)
+                x_right, y_right = zip(*road.right_points)
 
-                    # Tracer le graphique
-                    self.ax.plot(x_left, y_left, linestyle='-', color=color)
-                    self.ax.plot(x_right, y_right, linestyle='-', color=color)
-                else:
-                    color = colors[i % len(colors)]
-                    x_left, y_left = zip(*road.left_points)
-                    x_right, y_right = zip(*road.right_points)
-
-                    # Tracer le graphique
-                    self.ax.plot(x_left, y_left, linestyle='-', color=color)
-                    self.ax.plot(x_right, y_right, linestyle='-', color=color)
-
+                # Tracer le graphique
+                self.ax.plot(x_left, y_left, linestyle='-', color='black')
+                if road in self.path:
+                    if road == self.path[0]:
+                        self.ax.plot(x_middle, y_middle, linestyle='-', color='red')
+                    else:
+                        self.ax.plot(x_middle, y_middle, linestyle='-', color='blue')
+                self.ax.plot(x_right, y_right, linestyle='-', color='black')
         plt.xlabel('X-axis')
         plt.ylabel('Y-axis')
         plt.title('Road Visualization')
         plt.axis('equal')
         plt.show()
+
+    def create_path(self):
+        previous_road = self.road_list[16]
+        self.path.append(previous_road)
+        # for road in self.road_list:
+        #     print(road.forwardRoad, road.leftRoad, road.rightRoad)
+        #     if road.forwardRoad is not None:
+        #         self.path.append(road)
+        # print(previous_road.forwardRoad.segment_list)
+        for road in previous_road.previous_road_list:
+            self.path.append(road)
 
     # DO NOT USE : debug function
     def on_click(self, event):
@@ -355,6 +395,7 @@ def get_angle(a, b, c):
     angle = np.arctan2(np.cross(ba, bc), np.dot(ba, bc))
 
     return angle
+
 
 if __name__ == "__main__":
     node = MapHandler()
