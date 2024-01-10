@@ -194,13 +194,6 @@ class DistanceExtractor (object):
 			distance = distances[index]
 			position = relevant_points_reference[:, index]
 
-			if self.use_map:
-				# filter out object that are not on the road
-				reference_to_map = self.get_transform(self.reference_frame, self.map_frame)
-				position_map = reference_to_map @ position.T
-				if not self.map_handler.is_on_road((position_map[0], position_map[2])):
-					continue
-
 			obj = Object()
 			obj.bbox = bbox
 			obj.distance = distance
@@ -212,7 +205,6 @@ class DistanceExtractor (object):
 			object_list.append(obj)
 
 		return object_list
-	
 
 	def get_color(self, distances):
 		# Generate the color gradient from point distances

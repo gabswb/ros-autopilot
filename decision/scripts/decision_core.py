@@ -32,6 +32,27 @@ scenario_1 = [
 	(0, 0, 0, 0),
 ]
 
+scenario_2 = [
+    (18.15361054, -47.41237169   ,0.96677875, CRUISING_SPEED),
+    (54.74029084, -47.30521087   ,1.02022967, CRUISING_SPEED),
+    (66.7304556 , -43.99138689   ,1.01697336, CRUISING_SPEED),
+    (71.51203504, -39.06325853   ,1.07229334, CRUISING_SPEED),
+    (74.0342493 , -27.52463918   ,1.20117046, CRUISING_SPEED),
+    (71.86884084, -5.64001628  ,1.41960615, CRUISING_SPEED),
+    (65.44566243, -0.35178498  ,1.48962935, CRUISING_SPEED),
+    (49.22636374,  1.18166077  ,1.53834721, CRUISING_SPEED),
+    (13.4064584 ,  1.95179946  ,1.54746038, CRUISING_SPEED),
+    (7.82547614 ,5.15075345 ,1.53931455, CRUISING_SPEED),
+    (-4.49240616,  9.01459738  ,1.50743689, CRUISING_SPEED),
+    (-7.63235864,  4.46500056  ,1.47302249, CRUISING_SPEED),
+    (-6.88512818, -6.00275978  ,1.40815107, CRUISING_SPEED),
+    (-2.37454267, -16.46479195   ,1.33515607, CRUISING_SPEED),
+    (-2.14230698, -34.8977415    ,1.06896411, CRUISING_SPEED),
+    (-1.81928863, -59.59779926   ,0.53495641, CRUISING_SPEED),
+    (-2.92656799e+00,  -7.89984296e+01  ,5.575,43632e-02, CRUISING_SPEED),
+    (0, 0, 0, 0),
+]
+
 class DecisionMaker(object):
 	def __init__(self, config, publishing_rate):
 		self.config = config
@@ -65,7 +86,7 @@ class DecisionMaker(object):
 		self.current_target_point = None
 		self.current_target_speed = None
 		self.target_reached_count = 0
-		self.targets = scenario_1 # array of target points (x,y,z,speed)
+		self.targets = scenario_2 # array of target points (x,y,z,speed)
 
 		# Overtaking states
 		self.overtaking = False
@@ -92,7 +113,9 @@ class DecisionMaker(object):
 
 		# Initialize car topic subscribers
 		self.velocity_subscriber = rospy.Subscriber(self.velocity_topic, TwistStamped, self.callback_velocity)
+		self.next_target()
 		rospy.loginfo("Decision ready")
+
 
 	def callback_perception(self, data):
 		"""Callback called to get the list of objects from the perception topic"""
@@ -191,7 +214,7 @@ class DecisionMaker(object):
 		cam_act.backward = backward
 		self.camera_activation.publish(cam_act)
 
-	def publish_decision_info(self):
+	def publish_decision_info(self, roads_id, is_road_available):
 		decision_info = DecisionInfo()
 		decision_info.target1 = list(self.current_target_point)
 		decision_info.target2 = list(self.targets[0][0:3]) if len(self.targets) > 1 else []
@@ -199,6 +222,8 @@ class DecisionMaker(object):
 		decision_info.target4 = list(self.targets[2][0:3]) if len(self.targets) > 3 else []
 		decision_info.target5 = list(self.targets[3][0:3]) if len(self.targets) > 4 else []
 		decision_info.target_speed = self.current_target_speed
+		decision_info.roads_to_check_ids = roads_id
+		decision_info.is_road_available = is_road_available
 		self.decision_publisher.publish(decision_info)
 
 	def decision_maker(self):
@@ -225,24 +250,45 @@ class DecisionMaker(object):
 		slowing_down = False
 		stop = False
 
-		# LOOK FOR SURROUNDING DANGERS
+		next_road = self.map_handler.get_road_position(self.current_target_point[:2])
+		current_road = self.map_handler.get_road_position(current_position[:2])
+
+		if current_road is None or next_road is None:
+			self.panic_mode = True
+			return
+
+		roads_to_check = [next_road]
+
 		if not self.overtaking:
-			for obj in self.object_list:
-				if obj.bbox.class_id in to_not_kill:
-					obj_lane_side = self.map_handler.get_lane_side(obj)
-					if obj_lane_side == lane_side.LEFT:
-						rospy.loginfo(f"INFO: Left lane {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
-						objetct_on_left_line.append(obj)
-					elif obj_lane_side == lane_side.RIGHT:
-						rospy.loginfo(f"INFO: Right lane {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
-						objetct_on_right_line.append(obj)
-					elif obj_lane_side == lane_side.FRONT:
-						rospy.loginfo(f"INFO: Preceding {obj.distance:.2f}m away from {self.classes[obj.bbox.class_id]}")
-						preceding_object = obj
-						if obj.distance < STOP_THRESHOLD_DISTANCE:
-							stop = True
-						elif obj.distance < ADAPT_SPEED_DISTANCE * self.real_speed:
-							slowing_down = True
+			roads_to_check.append(current_road)
+
+		roads_id = [road.id for road in roads_to_check]
+
+		roads = []
+		is_road_available = [2 for road in roads_to_check]
+
+		for obj in self.object_list:
+			x, y, z = self.map_handler.get_world_position([obj.x, obj.y, obj.z])
+
+			object_road = self.map_handler.get_road_position((x, y))
+			if object_road is not None:
+				for i, road_to_to_check in enumerate(roads_to_check):
+					if road_to_to_check == object_road:
+						dist = np.linalg.norm([obj.x, obj.y, obj.z])
+						if obj.z > 0:
+							if dist < STOP_THRESHOLD_DISTANCE:
+								stop = True
+								is_road_available[i] = 0
+							elif dist < self.real_speed * ADAPT_SPEED_DISTANCE:
+								slowing_down = True
+								is_road_available[i] = 1
+
+							if preceding_object is None:
+								preceding_object = obj
+							elif obj.z < preceding_object.z:
+								preceding_object = obj
+
+				roads.append(object_road)
 
 		# START OVERTAKING
 		if not self.overtaking and preceding_object is not None:
@@ -270,7 +316,7 @@ class DecisionMaker(object):
 		
 		# SEND CONTROLS
 		self.controller.handle_decision(target_position, target_speed, self.real_speed)
-		self.publish_decision_info()
+		self.publish_decision_info(roads_id, is_road_available)
 
 
 if __name__ == "__main__":
