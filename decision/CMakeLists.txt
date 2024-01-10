@@ -48,6 +48,7 @@ find_package(catkin REQUIRED
 add_message_files(
   FILES
   CameraActivation.msg
+  DecisionInfo.msg
 )
 
 ## Generate services in the 'srv' folder

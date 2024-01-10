@@ -12,9 +12,10 @@ import tf2_ros
 import transforms3d.quaternions as quaternions
 
 from perception.msg import ObjectList, Object, ObjectBoundingBox
+from decision.msg import DecisionInfo
 
-WINDOW_SIZE_X = 50
-WINDOW_SIZE_X = 50
+WINDOW_SIZE_X = 75
+WINDOW_SIZE_Y = 75
 
 
 class MapPlotter(object):
@@ -40,13 +41,16 @@ class MapPlotter(object):
 		self.ln, = plt.plot([], [], 'ro')
 		self.obj_scatter = None
 
+		# Decision info
+		self.targets = []
 
 	def update_plot(self, frame):
+		self.car_position = self.get_world_position(np.array([0,0,0,1]))
 
 		x = self.car_position[0]
 		y = self.car_position[1]
 		self.ax.set_xlim(x-WINDOW_SIZE_X//2, x+WINDOW_SIZE_X//2)
-		self.ax.set_ylim(y-WINDOW_SIZE_X//2, y+WINDOW_SIZE_X//2)
+		self.ax.set_ylim(y-WINDOW_SIZE_Y//2, y+WINDOW_SIZE_Y//2)
 		self.ax.set_aspect('equal')
 		self.ln.set_data(x, y)
 		
@@ -55,19 +59,27 @@ class MapPlotter(object):
 		if self.objects_position:
 			obj_positions = np.array(self.objects_position)
 			self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='blue', marker='o', label='Objects')
+		
+		if len(self.targets) > 0:
+			targets = np.array(self.targets)
+			self.ax.scatter(targets[:, 0], targets[:, 1], c='red', marker='X', label='Targets')
 
 
 		return self.ln, self.obj_scatter
 
 	def perception_callback(self, data):
-		self.car_position = self.get_world_position(np.array([0,0,0,1]))
-
 		self.objects_position = []
 		print(len(data.object_list))
 		for obj in data.object_list:
 			obj_pos = self.get_world_position(np.array([obj.x, obj.y, obj.z, 1]))
 			self.objects_position.append(obj_pos)
-			
+
+
+	def decision_callback(self, data):
+		self.targets = []
+		for target in [data.target1, data.target2, data.target3, data.target4, data.target5]:
+			if len(target) > 0:
+				self.targets.append(target)
 
 	def plot_init(self):
 		for left_boundary_x, left_boundary_y, right_boundary_x, right_boundary_y in \
@@ -102,9 +114,6 @@ class MapPlotter(object):
 	def get_world_position(self, position):
 		reference_to_map = self.get_transform(self.config["map"]["reference-frame"], self.config["map"]["world-frame"])
 		return (reference_to_map @ position.T)[:3]
-
-
-
 
 	def process_road_network(self):
 		'''Return true if target_position is on the road
@@ -143,7 +152,8 @@ if __name__ == "__main__":
 			config = yaml.load(config_file, yaml.Loader)
 		rospy.init_node("map_plotter")
 		node = MapPlotter(config)
-		sub = rospy.Subscriber(config["topic"]["object-info"], ObjectList, node.perception_callback)
+		perception_subscriper = rospy.Subscriber(config["topic"]["object-info"], ObjectList, node.perception_callback)
+		decision_subscriper = rospy.Subscriber(config["topic"]["decision-info"], DecisionInfo, node.decision_callback)
 		ani = FuncAnimation(node.fig, node.update_plot, init_func=node.plot_init)
 		plt.show(block=True)  # Display the initial plot
 		rospy.spin()
