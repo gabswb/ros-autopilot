@@ -59,18 +59,23 @@ class MapHandler(object):
             if self.is_segment_assigned(self.road_network[i]["guid"]) is False:
                 Road(self, self.road_network[i])
 
-    def create_path(self):
-        first_road = self.road_list[59]
-        second_road = first_road.forwardRoad
-        third_road = second_road.leftRoad
-        fourth_road = third_road.forwardRoad
+    def get_road_position(self, position, first_roads_to_check=None):
+        if first_roads_to_check is not None:
+            for road_to_check in first_roads_to_check:
+                for i in range(len(road_to_check.path_to_follow) - 1):
+                    x1, y1 = road_to_check.left_points[i]
+                    x2, y2 = road_to_check.left_points[i + 1]
+                    x3, y3 = road_to_check.right_points[i]
+                    x4, y4 = road_to_check.right_points[i + 1]
 
-        self.path.append(first_road)
-        self.path.append(second_road)
-        self.path.append(third_road)
-        self.path.append(fourth_road)
+                    x, y = position
 
-    def get_road_position(self, position):
+                    is_in_quad = point_in_quad(x1, y1, x2, y2, x4, y4, x3, y3, x, y)
+
+                    if is_in_quad:
+                        self.path.append(road_to_check)
+                        return road_to_check
+
         for road in self.road_list:
             for i in range(len(road.path_to_follow) - 1):
                 x1, y1 = road.left_points[i]

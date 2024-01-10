@@ -30,9 +30,10 @@ class MapPlotter(object):
         self.car_position = self.map_handler.get_world_position(np.array([0, 0, 0]))
 
         self.fig, self.ax = plt.subplots()
-        self.ln, = plt.plot([], [], 'ro')
+        self.ln, = plt.plot([], [], '<')
         self.obj_scatter = None
-        self.lines_scatter = []
+        self.target_scatter = None
+        self.rectangle_scatter = []
 
         # Decision info
         self.targets = []
@@ -47,23 +48,23 @@ class MapPlotter(object):
         self.ax.set_aspect('equal')
         self.ln.set_data(x, y)
 
-        for line_scatter in self.lines_scatter:
-            line_scatter.remove()
+        if self.target_scatter is not None and self.target_scatter in self.ax.collections:
+            self.target_scatter.remove()
+
+        for rectangle in self.rectangle_scatter:
+            rectangle.remove()
             # self.ax.add_collection(line_scatter)
-        self.lines_scatter = []
+        self.rectangle_scatter = []
 
         if self.obj_scatter is not None and self.obj_scatter in self.ax.collections:
             self.obj_scatter.remove()
         if self.objects_position:
             obj_positions = np.array(self.objects_position)
-            self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='blue', marker='o',
+            self.obj_scatter = self.ax.scatter(obj_positions[:, 0], obj_positions[:, 1], c='blue', marker='D',
                                                label='Objects')
 
         for road_id, available in self.road_to_check.items():
             road = self.map_handler.road_list[road_id]
-
-            x_left, y_left = zip(*road.left_points)
-            x_right, y_right = zip(*road.right_points)
 
             color = 'green'
             if available == 0:
@@ -73,17 +74,12 @@ class MapPlotter(object):
 
             polygon = Polygon(road.left_points + road.right_points[::-1], closed=True, fill=True, color=color, alpha=0.5)
 
-            self.lines_scatter.append(polygon)
+            self.rectangle_scatter.append(polygon)
             self.ax.add_patch(polygon)
-
-            left_line, = self.ax.plot(x_left, y_left, linestyle='-', color=color)
-            self.lines_scatter.append(left_line)
-            right_line, = self.ax.plot(x_right, y_right, linestyle='-', color=color)
-            self.lines_scatter.append(right_line)
 
         if len(self.targets) > 0:
             targets = np.array(self.targets)
-            self.ax.scatter(targets[:, 0], targets[:, 1], c='red', marker='X', label='Targets')
+            self.target_scatter = self.ax.scatter(targets[:, 0], targets[:, 1], c='red', marker='X', label='Targets')
 
         return self.ln, self.obj_scatter
 
