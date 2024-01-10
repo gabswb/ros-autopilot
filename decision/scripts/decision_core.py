@@ -8,7 +8,7 @@ import rospy
 from geometry_msgs.msg import TwistStamped
 
 from perception.msg import ObjectList
-from decision.msg import CameraActivation
+from decision.msg import CameraActivation, DecisionInfo
 
 from common_scripts.map_handler import MapHandler, lane_side
 from decision_state import DECISION_STATE
@@ -42,6 +42,7 @@ class DecisionMaker(object):
 		self.speed_topic = self.config["topic"]["speed"]
 		self.speed_cap_topic = self.config["topic"]["speed-cap"]
 		self.object_info_topic = self.config["topic"]["object-info"]
+		self.decision_topic = self.config["topic"]["decision-info"]
 		self.toogle_navigation_service_name = self.config["service"]["toogle-navigation"]
 		self.class_name_path = self.config["model"]["detection-model-class-names-path"]
 		self.navigation = self.config["feature"]["navigation"]
@@ -82,6 +83,9 @@ class DecisionMaker(object):
 		# Controller
 		self.controller = Controller(config)
 		self.camera_activation = rospy.Publisher(self.camera_activation_topic, CameraActivation, queue_size=10)
+
+		# Initialize decision topic publisher
+		self.decision_publisher = rospy.Publisher(self.decision_topic, DecisionInfo, queue_size=10)
 
 		# Initialize perception topic subscribers
 		self.perception_subscriber = rospy.Subscriber(self.object_info_topic, ObjectList, self.callback_perception)
@@ -187,6 +191,16 @@ class DecisionMaker(object):
 		cam_act.backward = backward
 		self.camera_activation.publish(cam_act)
 
+	def publish_decision_info(self):
+		decision_info = DecisionInfo()
+		decision_info.target1 = list(self.current_target_point)
+		decision_info.target2 = list(self.targets[0][0:3]) if len(self.targets) > 1 else []
+		decision_info.target3 = list(self.targets[1][0:3]) if len(self.targets) > 2 else []
+		decision_info.target4 = list(self.targets[2][0:3]) if len(self.targets) > 3 else []
+		decision_info.target5 = list(self.targets[3][0:3]) if len(self.targets) > 4 else []
+		decision_info.target_speed = self.current_target_speed
+		self.decision_publisher.publish(decision_info)
+
 	def decision_maker(self):
 		# HANDLE PANIC MODE 
 		if self.panic_mode: 
@@ -256,6 +270,7 @@ class DecisionMaker(object):
 		
 		# SEND CONTROLS
 		self.controller.handle_decision(target_position, target_speed, self.real_speed)
+		self.publish_decision_info()
 
 
 if __name__ == "__main__":
