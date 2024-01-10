@@ -49,8 +49,6 @@ class Perception(object):
         self.forward_right_camera = False
         self.backward_camera = True
 
-        # Decision reception module
-        self.backward_distance_extractor = DistanceExtractor(config, self.config["topic"]["backward-camera-info"], self.config["topic"]["backward-lidar-viz"], self.lidar_projection, self.use_map)
 
 
         # Publisher
@@ -93,11 +91,11 @@ class Perception(object):
         rospy.loginfo(f"\tOnly front camera: {self.only_front_camera}")
 
     def callback_camera_activation(self, data):
-        rospy.loginfo(f'Camera activation: forward:{self.forward_camera} forward_left:{self.forward_left_camera} forward_right:{self.forward_right_camera} backward:{self.backward_camera}')
         self.backward_camera = data.backward
         self.forward_left_camera = data.forward_left
         self.forward_right_camera = data.forward_right
         self.forward_camera = data.forward
+        rospy.loginfo(f'Camera activation: forward:{self.forward_camera} forward_left:{self.forward_left_camera} forward_right:{self.forward_right_camera} backward:{self.backward_camera}')
 
     def multicamera_perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, pointcloud_data):
         if self.time_statistics:
@@ -136,7 +134,7 @@ class Perception(object):
                 if self.time_statistics:
                     rospy.loginfo(f"Light detection time: {time.time() - start:.2f}")   
 
-            if self.rviz_visualize:
+            if self.rviz_visualize and image_data.header.frame_id == "camera_forward_optical_frame":
                 for obj in objects:
                     self.draw_bounding_box(image, obj.bbox.class_id, obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.w,
                                         obj.bbox.y + obj.bbox.h, obj, obj.distance, obj.bbox.instance_id, obj.left_blink, obj.right_blink)

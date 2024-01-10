@@ -197,7 +197,7 @@ class Road():
 
 class MapHandler(object):
     def __init__(self):
-        with open('/home/lucas/Documents/UTBM/VA50/catkin_ws/src/road_network.json', 'r') as f:
+        with open('../../../road_network.json', 'r') as f:
             self.road_network = json.load(f)
         self.lane_width = 3.5
 
