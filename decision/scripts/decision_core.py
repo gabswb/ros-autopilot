@@ -3,6 +3,7 @@
 import sys
 import yaml
 import numpy as np
+import math
 
 import rospy
 from geometry_msgs.msg import TwistStamped
@@ -123,7 +124,8 @@ class DecisionMaker(object):
         fourth_road = third_road.forwardRoad
         fifth_road = fourth_road.leftRoad
         sixth_road = fifth_road.forwardRoad
-        seventh_road = sixth_road.forwardRoad
+        seventh_road = sixth_road.leftRoad
+        eighth_road = seventh_road.forwardRoad
 
         self.path.append(first_road)
         self.path.append(second_road)
@@ -132,12 +134,17 @@ class DecisionMaker(object):
         self.path.append(fifth_road)
         self.path.append(sixth_road)
         self.path.append(seventh_road)
+        # self.path.append(eighth_road)
 
     def convert_scenario_to_path(self):
+        previous_x, previous_y = 0, 0
         for road in self.path[1:]:
-            for point in road.path_to_follow[2:]:
+            for point in road.path_to_follow[1:-1]:
                 x, y = point
-                scenario_1.append((round(x, 1), round(y, 1), 1, CRUISING_SPEED))
+                x_round, y_round = round(x, 1), round(y, 1)
+                if math.dist((previous_x, previous_y), (x_round, y_round)) > 2:
+                    scenario_1.append((x_round, y_round, 1, CRUISING_SPEED))
+                    previous_x, previous_y = x_round, y_round
 
         scenario_1.append((0, 0, 0, 0))
 
@@ -220,7 +227,7 @@ class DecisionMaker(object):
         if self.last_distance_to_target is None or self.last_distance_to_target_time is None:
             self.last_distance_to_target = distance_to_target
             self.last_distance_to_target_time = rospy.get_time()
-        elif rospy.get_time() - self.last_distance_to_target_time > 1:
+        elif rospy.get_time() - self.last_distance_to_target_time > 0.5:
             if distance_to_target > self.last_distance_to_target:
                 rospy.loginfo(f"INFO: going away from target")
                 self.next_target()
@@ -280,7 +287,6 @@ class DecisionMaker(object):
         preceding_object = None
         slowing_down = False
         stop = False
-
         current_road = self.map_handler.get_road_position(current_position[:2], self.path)
         next_road = self.map_handler.get_road_position(self.current_target_point[:2], self.path)
         if not self.overtaking:
@@ -289,10 +295,13 @@ class DecisionMaker(object):
                 if i >= len(self.targets):
                     break
                 next_road = self.map_handler.get_road_position(self.targets[i][:2], self.path)
+                if next_road is None:
+                    next_road = current_road
                 i += 1
 
         if next_road is None:
-            self.panic_mode = True
+            if current_road is None:
+                self.panic_mode = True
             return
 
         roads_to_check = [next_road]
