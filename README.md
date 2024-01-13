@@ -1,4 +1,4 @@
-# ros-autopilot
+# Perception of Surrounding Environment for Navigation Decision of Autonomous Vehicles
 ## Build
 ### Requirements
 - install packages listed in `requirements.txt`
