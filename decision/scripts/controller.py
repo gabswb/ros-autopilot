@@ -7,11 +7,6 @@ import numpy as np
 import rospy
 from std_msgs.msg import Float32
 from std_srvs.srv import Empty
-from geometry_msgs.msg import TwistStamped
-
-from perception.msg import ObjectList
-from decision_state import DECISION_STATE
-
 
 STOP_THRESHOLD_DISTANCE = 10 # meters
 DEFAULT_RATE = 100 # Hz
@@ -107,7 +102,7 @@ if __name__ == "__main__":
         rate = rospy.Rate(publishing_rate)
 
         while not rospy.is_shutdown():
-            node.handle_decision([DECISION_STATE.REACH_TARGET], [-2, 2], 2)
+            node.handle_decision([-2, 2], 2)
             rate.sleep()
 
         rospy.spin()

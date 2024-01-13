@@ -11,13 +11,13 @@ from geometry_msgs.msg import TwistStamped
 from perception.msg import ObjectList
 from decision.msg import CameraActivation, DecisionInfo
 
-from common_scripts.map_handler import MapHandler, lane_side
-from decision_state import DECISION_STATE
+from common_scripts.map_handler import MapHandler
 from controller import Controller
 
 to_not_kill = (
 0, 1, 2, 3, 4, 5, 6, 7, 8, 25)  # person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, umbrella
 STOP_THRESHOLD_DISTANCE = 10  # meters
+OVERTAKING_STOP_THRESHOLD_DISTANCE = 100  # meters
 ADAPT_SPEED_DISTANCE = 9
 DEFAULT_RATE = 100  # Hz
 OVERTAKING_SPEED = 2
@@ -26,30 +26,6 @@ LEFT = -1
 RIGHT = 1
 CAR_LENGHT = 3
 CAR_WIDTH = 2
-
-scenario_1 = []
-
-scenario_2 = [
-    (18.5237075, -47.2178375, 0.96677875, CRUISING_SPEED),
-    (54.74029084, -47.30521087, 1.02022967, CRUISING_SPEED),
-    (66.7304556, -43.99138689, 1.01697336, CRUISING_SPEED),
-    (71.51203504, -39.06325853, 1.07229334, CRUISING_SPEED),
-    (74.0342493, -27.52463918, 1.20117046, CRUISING_SPEED),
-    (71.86884084, -5.64001628, 1.41960615, CRUISING_SPEED),
-    (65.44566243, -0.35178498, 1.48962935, CRUISING_SPEED),
-    (49.22636374, 1.18166077, 1.53834721, CRUISING_SPEED),
-    (13.4064584, 1.95179946, 1.54746038, CRUISING_SPEED),
-    (7.82547614, 5.15075345, 1.53931455, CRUISING_SPEED),
-    (-4.49240616, 9.01459738, 1.50743689, CRUISING_SPEED),
-    (-7.63235864, 4.46500056, 1.47302249, CRUISING_SPEED),
-    (-6.88512818, -6.00275978, 1.40815107, CRUISING_SPEED),
-    (-2.37454267, -16.46479195, 1.33515607, CRUISING_SPEED),
-    (-2.14230698, -34.8977415, 1.06896411, CRUISING_SPEED),
-    (-1.81928863, -59.59779926, 0.53495641, CRUISING_SPEED),
-    (-2.92656799e+00, -7.89984296e+01, 5.575, 43632e-02, CRUISING_SPEED),
-    (0, 0, 0, 0),
-]
-
 
 class DecisionMaker(object):
     def __init__(self, config, publishing_rate):
@@ -79,10 +55,12 @@ class DecisionMaker(object):
 
         # Map handler
         self.map_handler = MapHandler(config)
+
+        # Path
         self.path = []
         self.create_path()
+        self.targets = self.convert_path_to_target_points() # array of target points (x,y,z,speed)
         self.next_roads_to_check = self.path[:2]
-        self.convert_scenario_to_path()
 
         # Target states
         self.last_distance_to_target = None
@@ -90,7 +68,6 @@ class DecisionMaker(object):
         self.current_target_point = None
         self.current_target_speed = None
         self.target_reached_count = 0
-        self.targets = scenario_1  # array of target points (x,y,z,speed)
 
         # Overtaking states
         self.overtaking = False
@@ -136,17 +113,19 @@ class DecisionMaker(object):
         self.path.append(seventh_road)
         # self.path.append(eighth_road)
 
-    def convert_scenario_to_path(self):
+    def convert_path_to_target_points(self):
         previous_x, previous_y = 0, 0
+        target_points = []
         for road in self.path[1:]:
             for point in road.path_to_follow[1:-1]:
                 x, y = point
                 x_round, y_round = round(x, 1), round(y, 1)
                 if math.dist((previous_x, previous_y), (x_round, y_round)) > 2:
-                    scenario_1.append((x_round, y_round, 1, CRUISING_SPEED))
+                    target_points.append((x_round, y_round, 1, CRUISING_SPEED))
                     previous_x, previous_y = x_round, y_round
 
-        scenario_1.append((0, 0, 0, 0))
+        target_points.append((0, 0, 0, 0))
+        return target_points
 
     def callback_perception(self, data):
         """Callback called to get the list of objects from the perception topic"""
@@ -240,8 +219,11 @@ class DecisionMaker(object):
 
         # get target position in car referential
         target = self.map_handler.get_car_world_position(self.current_target_point)
+
+        # if target is behind the car, go to the next one
         if target[2] < 0:
             self.next_target()
+            
         return target, speed
 
     def activate_camera(self, forward=True, forward_left=False, forward_right=False, backward=True):
@@ -276,17 +258,19 @@ class DecisionMaker(object):
             rospy.loginfo(f"ACTION: STOP (SCENARIO IS DONE)")
             self.controller.handle_decision([0, 0, 0], 0, self.real_speed)
             return
-
-        # GET CURRENT POSITION
-        current_position = self.map_handler.get_world_position()
+        
+        # PRINT CURRENT POSITION
         # rospy.loginfo(f'{current_position}')
         # return
 
-        objetct_on_left_line = []
-        objetct_on_right_line = []
+        # RESET STATES
+        current_position = self.map_handler.get_world_position()
         preceding_object = None
         slowing_down = False
         stop = False
+        roads = []
+
+        # DETERMINE NEXT ROAD 
         current_road = self.map_handler.get_road_position(current_position[:2], self.path)
         next_road = self.map_handler.get_road_position(self.current_target_point[:2], self.path)
         if not self.overtaking:
@@ -299,11 +283,13 @@ class DecisionMaker(object):
                     next_road = current_road
                 i += 1
 
+        # IF TARGET POINT ISN'T ON THE ROAD -> PANIC MODE 
         if next_road is None:
             if current_road is None:
                 self.panic_mode = True
             return
 
+        # DETERMINE ROADS TO CHECK
         roads_to_check = [next_road]
 
         if not self.overtaking:
@@ -311,19 +297,20 @@ class DecisionMaker(object):
                 roads_to_check.append(current_road)
 
         roads_id = [road.id for road in roads_to_check]
+        is_road_available = [2 for road in roads_to_check] # 0: STOP, 1: SLOW DOWN, 2: CLEAR
 
-        roads = []
-        is_road_available = [2 for road in roads_to_check]
-
+        # CHECK IF OBJECT ON ROADS TO CHECK
         for obj in self.object_list:
             x, y, z = self.map_handler.get_world_position([obj.x, obj.y, obj.z])
-
             object_road = self.map_handler.get_road_position((x, y))
             if object_road is not None:
                 for i, road_to_to_check in enumerate(roads_to_check):
                     if road_to_to_check == object_road:
                         dist = np.linalg.norm([obj.x, obj.y, obj.z])
                         if obj.z > 0:
+                            if self.overtaking and dist < OVERTAKING_STOP_THRESHOLD_DISTANCE:
+                                stop = True
+                                is_road_available[i] = 0
                             if dist < STOP_THRESHOLD_DISTANCE:
                                 stop = True
                                 is_road_available[i] = 0
@@ -352,10 +339,10 @@ class DecisionMaker(object):
                 self.overtaking = False
                 self.activate_camera(forward_right=False)
 
-        # GET TARGET
+        # GET TARGET TO FOLLOW
         target_position, target_speed = self.get_direction(current_position)
 
-        # HANDLE DANGER
+        # HANDLE DANGER (SLOW DOWN AND STOP)
         if slowing_down:
             rospy.loginfo(f"ACTION: SLOW DOWN")
             target_speed = self.real_speed / 2
@@ -363,10 +350,10 @@ class DecisionMaker(object):
             rospy.loginfo(f"ACTION: STOP")
             target_speed = 0
 
-        self.next_roads_to_check = roads_to_check
         # SEND CONTROLS
         self.controller.handle_decision(target_position, target_speed, self.real_speed)
         self.publish_decision_info(roads_id, is_road_available)
+        self.next_roads_to_check = roads_to_check
 
 
 if __name__ == "__main__":
