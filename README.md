@@ -29,4 +29,6 @@ rosrun perception perception_core.py src/config-utac.yml
     --only-front-camera # use only camera in perception pipeline
 # launch decision node
 rosrun decision decision_core.py src/config-utac.yml 100 # 100Hz = publishing control input frequency (need adjustments depending on the computer computing capacity)
+# launch visiualization node
+rosrun minimap map_plotter.py src/config-utac.yml                                         
 ```
