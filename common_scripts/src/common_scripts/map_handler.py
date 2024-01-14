@@ -92,16 +92,6 @@ class MapHandler(object):
                     return road
         return None
 
-    def get_lane_side(self, object):
-        if np.abs(object.x) <= self.lane_width / 2 and object.z >= 0:
-            return lane_side.FRONT
-        elif object.x < -self.lane_width / 2 and object.x >= -self.lane_width * 3 / 2:
-            return lane_side.LEFT
-        elif object.x > self.lane_width / 2 and object.x <= self.lane_width * 3 / 2:
-            return lane_side.RIGHT
-        else:
-            return lane_side.AWAY
-
     def get_transform(self, source_frame, target_frame):
         """Update the lidar-to-camera transform matrix from the tf topic"""
         try:

@@ -236,10 +236,6 @@ class Perception(object):
         # print label and instance id
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
-        # print lane side
-        lane_side = self.map_handler.get_lane_side(object)
-        cv2.putText(img, lane_side, (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
 
 
 if __name__ == "__main__":

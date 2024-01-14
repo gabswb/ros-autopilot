@@ -102,7 +102,6 @@ class DecisionMaker(object):
         fifth_road = fourth_road.leftRoad
         sixth_road = fifth_road.forwardRoad
         seventh_road = sixth_road.leftRoad
-        eighth_road = seventh_road.forwardRoad
 
         self.path.append(first_road)
         self.path.append(second_road)
@@ -111,7 +110,6 @@ class DecisionMaker(object):
         self.path.append(fifth_road)
         self.path.append(sixth_road)
         self.path.append(seventh_road)
-        # self.path.append(eighth_road)
 
     def convert_path_to_target_points(self):
         previous_x, previous_y = 0, 0

@@ -38,9 +38,9 @@ class VehicleLightsDetector(object):
                     x1, y1, x2, y2 = np.int32((dst_corners[0][0], dst_corners[0][1],
                                                dst_corners[2][0], dst_corners[2][1]))
 
-                    M = cv.getPerspectiveTransform(src_corners, dst_corners)
+                    M = cv.getAffineTransform(src_corners, dst_corners)
 
-                    previous_isolate_bbox = cv.warpPerspective(
+                    previous_isolate_bbox = cv.warpAffine(
                         previous_isolate_bbox, M, (previous_isolate_bbox.shape[1], previous_isolate_bbox.shape[0]))
 
                     image_abs_difference = cv.absdiff(current_isolate_bbox[y1:y2, x1:x2],
@@ -144,7 +144,7 @@ def isolate_bbox(image_with_bbox, bbox):
 
     diagonal = sqrt(l_x ** 2 + l_y ** 2)
 
-    corners = np.array([(x, y), (x_plus_w, y), (x_plus_w, y_plus_h), (x, y_plus_h)], dtype=np.float32)
+    corners = np.array([(x, y), (x_plus_w, y), (x_plus_w, y_plus_h)], dtype=np.float32)
 
     black_image[y:y_plus_h, x:x_plus_w] = image_with_bbox[y:y_plus_h, x:x_plus_w]
 
