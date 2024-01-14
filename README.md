@@ -1,4 +1,4 @@
-# Perception of Surrounding Environment for Navigation Decision of Autonomous Vehicles
+# Perception and Decision-Making for Autonomous Driving
 ## Build
 ### Requirements
 - install packages listed in `requirements.txt`
@@ -10,7 +10,7 @@ cd catkin_ws/
 catkin_make
 ```
 
-### Usage
+## Usage
 Run at the root dir (the one with src/ build/ etc ...)  :
 ```sh
 # launch ros
