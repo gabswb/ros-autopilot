@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import rospy
 import tf2_ros
 import transforms3d.quaternions as quaternions
-from common_scripts.road import Road
+from common.road import Road
 
 
 class lane_side(str, Enum):

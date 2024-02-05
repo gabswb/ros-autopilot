@@ -13,7 +13,7 @@ import transforms3d.quaternions as quaternions
 
 from perception.msg import ObjectList
 from decision.msg import DecisionInfo
-from common_scripts.map_handler import MapHandler
+from common.map_handler import MapHandler
 
 WINDOW_SIZE_X = 75
 WINDOW_SIZE_Y = 75

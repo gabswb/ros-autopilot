@@ -10,7 +10,7 @@ from geometry_msgs.msg import TwistStamped
 from perception.msg import ObjectList
 from decision.msg import CameraActivation, DecisionInfo
 
-from common_scripts.map_handler import MapHandler, lane_side
+from common.map_handler import MapHandler, lane_side
 from decision_state import DECISION_STATE
 from controller import Controller
 

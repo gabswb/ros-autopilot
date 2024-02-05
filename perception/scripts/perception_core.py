@@ -14,11 +14,18 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from object_detector import ObjectDetector
 from distance_extractor import DistanceExtractor
-from common_scripts.map_handler import MapHandler
+from common.map_handler import MapHandler
 from vehicle_lights import VehicleLightsDetector, BLINK_HEIGHT, RIGHT_BLINK, LEFT_BLINK, HAS_LIGHT
 
 DISPLAY_LIGHT_BBOX = True
 
+usage_msg = f"\
+Usage: {__file__} <config-file> [options]\n\
+    -h, --help      print this message\n\
+    --rviz          publish perception visualisation\n\
+    --verbose       verbose mode, print detected objects\n\
+    --yolov8l       use yolov8l model for better accuracy\n\
+    --use-map       use structural map to filter out object not on the road"
 
 class Perception(object):
     def __init__(self, config, rviz_visualize = False, lidar_projection = False, log_objects = False, time_statistics = False, yolov8l = False, use_map = False, detect_lights = True, only_front_camera = True):
@@ -243,8 +250,9 @@ class Perception(object):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <config-file> [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map] [--no-lights] [--only-front-camera]]")
+    if len(sys.argv) < 2 or '-h' in sys.argv or '--help' in sys.argv:
+        print(usage_msg)
+        #print(f"Usage : {sys.argv[0]} <config-file> [--rviz] [--lidar-projection] [--log-objects] [--time-statistics] [--yolov8l] [--use-map] [--no-lights] [--only-front-camera]]")
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
@@ -253,7 +261,7 @@ if __name__ == "__main__":
         p = Perception(config,
                         '--rviz' in sys.argv,
                         '--lidar-projection' in sys.argv,
-                        '--log-objects' in sys.argv,
+                        '--verbose' in sys.argv or '-v' in sys.argv,
                         '--time-statistics' in sys.argv,
                         '--yolov8l' in sys.argv,
                         '--use-map' in sys.argv,
