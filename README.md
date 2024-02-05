@@ -1,7 +1,18 @@
 # ros-autopilot
+This project provides a set of ros packages for perception and decision-making for autonomous driving in a dynamic environment. This project assumes that a structural map describing the static environment such as roads is available. In our test case, this map is described in the file `road_network.json`.
+## Packages description
+### perception
+The perception package goal is to detect and extract the position of the surrounding objects on the road. The perception is based on 2 types of sensors: RGB Fisheye Camera and LiDAR.
+### decision
+The decision package makes decisions based on the environment perceived by the vehicle. It can adapt the vehicle's speed to the vehicle in front, stop if necessary and overtake if the situation allows.
+### minimap
+The minimap package provides a simplified visualization of perception and decision-making using a minimap.
 ## Build
 ### Requirements
-- install packages listed in `requirements.txt`
+Install dependencies
+```
+pip install -r requirements.txt
+```
 ### With catkin
 ```sh
 mkdir -p catkin_ws/src
@@ -9,24 +20,25 @@ git clone https://github.com/gabswb/ros-autopilot.git catkin_ws/src
 cd catkin_ws/
 catkin_make
 ```
-
 ### Usage
-Run at the root dir (the one with src/ build/ etc ...)  :
+Start roscore
 ```sh
-# launch ros
 roscore
-# launch utac simulator
-simulator 
-# launch percepetion node
-rosrun perception perception_core.py src/config-utac.yml 
-    --rviz # publish on visuzalition topic 
-    --lidar-projection # !! only for visualization purpuse 
-    --log-objects # log published objects (yolo detection + its distance + its instance ID)
-    --time-statistics # time needed for the main operation (yolo detection time, distance extraction time, ...)
-    --yolov8l # use yolov8l model for better accuracy
-    --use-map # use structural map to filer out object not on the road
-    --no-lights # disable lights detection (for better performance)
-    --only-front-camera # use only camera in perception pipeline
-# launch decision node
-rosrun decision decision_core.py src/config-utac.yml 100 # 100Hz = publishing control input frequency (need adjustments depending on the computer computing capacity)
+```
+Launch perception package
+```
+rosrun perception perception_core.py src/config/config-file.yml [options]
+    -h, --help      print this message
+    --verbose       verbose mode, print detected objects
+    --yolov8l       use yolov8l model for better accuracy
+    --use-map       use structural map to filter out object not on the road
+```
+
+Launch decision package
+```
+rosrun decision decision_core.py src/config/config-file.yml <input-frequency>
+```
+Launch minimap package
+```
+rosrun minimap map_plotter.py src/config/config-file.yml
 ```
