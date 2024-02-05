@@ -1,6 +1,6 @@
 # ros-autopilot
 This project provides a set of ros packages for perception and decision-making for autonomous driving in a dynamic environment. This project assumes that a structural map describing the static environment such as roads is available. In our test case, this map is described in the file `road_network.json`.
-## Packages description
+## Packages usage
 ### perception
 The perception package goal is to detect and extract the position of the surrounding objects on the road. The perception is based on 2 types of sensors: RGB Fisheye Camera and LiDAR.
 ```sh
@@ -34,7 +34,7 @@ git clone https://github.com/gabswb/ros-autopilot.git catkin_ws/src
 cd catkin_ws/
 catkin_make
 ```
-### Usage
+### Run the project
 Start roscore
 ```sh
 roscore

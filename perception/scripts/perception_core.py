@@ -56,15 +56,13 @@ class Perception(object):
         self.forward_right_camera = False
         self.backward_camera = True
 
-
-
         # Publisher
         self.forward_bbox_publisher = rospy.Publisher(config["topic"]["forward-bbox-viz"], Image, queue_size=10)
         if not self.only_front_camera:
             self.backward_bbox_publisher = rospy.Publisher(config["topic"]["backward-bbox-viz"], Image, queue_size=10)
         self.object_info_publisher = rospy.Publisher(config["topic"]["object-info"], ObjectList, queue_size=10)
 
-        # visualization utils
+        # Visualization utils
         if self.rviz_visualize:
             self.classes = None
             with open(config["model"]["detection-model-class-names-path"], 'r') as f:
@@ -98,6 +96,7 @@ class Perception(object):
         rospy.loginfo(f"\tOnly front camera: {self.only_front_camera}")
 
     def callback_camera_activation(self, data):
+        """Callback for camera activation topic"""
         self.backward_camera = data.backward
         self.forward_left_camera = data.forward_left
         self.forward_right_camera = data.forward_right
@@ -105,6 +104,7 @@ class Perception(object):
         rospy.loginfo(f'Camera activation: forward:{self.forward_camera} forward_left:{self.forward_left_camera} forward_right:{self.forward_right_camera} backward:{self.backward_camera}')
 
     def multicamera_perception_callback(self, forward_img_data, forward_left_img_data, forward_right_img_data, backward_img_data, pointcloud_data):
+        """Callback for perception topic"""
         if self.time_statistics:
             overall_start = time.time()
 
@@ -162,6 +162,7 @@ class Perception(object):
             rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
 
     def singlecamera_perception_callback(self, image_data, pointcloud_data):
+        """Callback for perception topic"""
         if self.time_statistics:
             overall_start = time.time()
         
@@ -208,9 +209,8 @@ class Perception(object):
         if self.time_statistics:
             rospy.loginfo(f"Overall time: {time.time() - overall_start:.2f}")
 
-
-
     def draw_bounding_box(self, img, class_id, x, y, x_plus_w, y_plus_h, object, d = None, instance_id = None, left_blink = False, right_blink = False):
+        """Draw bounding box on the image"""
         label = ""
         if instance_id != 0:
             label = f"#{instance_id}: "
@@ -242,10 +242,6 @@ class Perception(object):
 
         # print label and instance id
         cv2.putText(img, label, (x-10,y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
-        # print lane side
-        lane_side = self.map_handler.get_lane_side(object)
-        cv2.putText(img, lane_side, (x - 10, y_plus_h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
 
 
