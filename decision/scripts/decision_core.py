@@ -12,7 +12,6 @@ from perception.msg import ObjectList
 from decision.msg import CameraActivation, DecisionInfo
 
 from common.map_handler import MapHandler, lane_side
-from decision_state import DECISION_STATE
 from controller import Controller
 
 to_not_kill = (
