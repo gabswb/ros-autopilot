@@ -1,5 +1,7 @@
 transforms3d
-ros-noetic-ros-numpy
-ultralytics
-PyYAML
+pyyaml
 matplotlib
+rospy
+rospkg
+ultralytics
+ros-noetic-ros-numpy
