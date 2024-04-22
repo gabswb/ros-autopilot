@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-import sys
+#!/usr/bin/env python3import sys
 
 import numpy as np
 import cv2

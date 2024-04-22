@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-
+#!/usr/bin/env python3
 import sys
 import math
 

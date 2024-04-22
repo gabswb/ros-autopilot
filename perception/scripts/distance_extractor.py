@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-
+#!/usr/bin/env python3
 import sys
 import rospy
 import yaml
@@ -8,7 +7,8 @@ import cv2 as cv
 import numpy as np
 np.float = np.float64 # fix for https://github.com/eric-wieser/ros_numpy/issues/37
 
-import tf2_ros
+#import tf2_ros
+import tf
 import ros_numpy
 from cv_bridge import CvBridge
 import transforms3d.quaternions as quaternions
@@ -46,8 +46,8 @@ class DistanceExtractor (object):
 		self.lidar_viz_publisher = rospy.Publisher(lidar_viz_topic, Image, queue_size=10)
 		
 		# Initialize the transformation listener
-		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
-		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+		#self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
+		self.tf_listener = tf.TransformListener()
 
 		self.transforms = {}
 
@@ -62,16 +62,16 @@ class DistanceExtractor (object):
 		
 		try:
 			# It’s lookup_transform(target_frame, source_frame, …) !!!
-			transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rospy.Time(0))
-		except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+			(translation, rotation) = self.tf_listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
+		except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
 			return
 
 		# Build the matrix elements
-		rotation_message = transform.transform.rotation
-		rotation_quaternion = np.asarray((rotation_message.w, rotation_message.x, rotation_message.y, rotation_message.z))
+		rotation_message = rotation
+		rotation_quaternion = np.asarray((rotation_message[3], rotation_message[0], rotation_message[1], rotation_message[2]))
 		rotation_matrix = quaternions.quat2mat(rotation_quaternion)
-		translation_message = transform.transform.translation
-		translation_vector = np.asarray((translation_message.x, translation_message.y, translation_message.z)).reshape(3, 1)
+		translation_message = translation
+		translation_vector = np.asarray((translation_message[0], translation_message[1], translation_message[2])).reshape(3, 1)
 		
 		# Build the complete transform matrix
 		transform_matrix = np.concatenate((

@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-import carla
+#!/usr/bin/env python3import carla
 import threading
 import time
 import random
