@@ -187,7 +187,7 @@ class DecisionMaker(object):
         self.last_distance_to_target = None
         self.last_distance_to_target_time = None
         rospy.loginfo(
-            f"ACTION: reach target (x={self.current_target_point[0]:.2f};y={self.current_target_point[1]:.2f}) at {self.current_target_speed} km/h")
+            "ACTION: reach target (x={:.2f};y={:.2f}) at {} km/h".format(self.current_target_point[0], self.current_target_point[1], self.current_target_speed))
 
     def get_direction(self, current_position):
         if self.current_target_point is None:
@@ -206,7 +206,7 @@ class DecisionMaker(object):
             self.last_distance_to_target_time = rospy.get_time()
         elif rospy.get_time() - self.last_distance_to_target_time > 0.5:
             if distance_to_target > self.last_distance_to_target:
-                rospy.loginfo(f"INFO: going away from target")
+                rospy.loginfo("INFO: going away from target")
                 self.next_target()
             self.last_distance_to_target = distance_to_target
             self.last_distance_to_target_time = rospy.get_time()
@@ -247,13 +247,13 @@ class DecisionMaker(object):
     def decision_maker(self):
         # HANDLE PANIC MODE
         if self.panic_mode:
-            rospy.loginfo(f"ACTION: STOP (PANIC MODE)")
+            rospy.loginfo("ACTION: STOP (PANIC MODE)")
             self.controller.handle_decision([0, 0, 0], 0, self.real_speed)
             return
 
         # HANDLE SCENARIO END
         if len(self.targets) == 0:
-            rospy.loginfo(f"ACTION: STOP (SCENARIO IS DONE)")
+            rospy.loginfo("ACTION: STOP (SCENARIO IS DONE)")
             self.controller.handle_decision([0, 0, 0], 0, self.real_speed)
             return
         
@@ -342,10 +342,10 @@ class DecisionMaker(object):
 
         # HANDLE DANGER (SLOW DOWN AND STOP)
         if slowing_down:
-            rospy.loginfo(f"ACTION: SLOW DOWN")
+            rospy.loginfo("ACTION: SLOW DOWN")
             target_speed = self.real_speed / 2
         if stop:
-            rospy.loginfo(f"ACTION: STOP")
+            rospy.loginfo("ACTION: STOP")
             target_speed = 0
 
         # SEND CONTROLS
@@ -356,14 +356,14 @@ class DecisionMaker(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Usage : {sys.argv[0]} <parameter-file> <publish-rate (optional)>")
+        print("Usage : {} <parameter-file> <publish-rate (optional)>".format(sys.argv[0]))
     else:
         with open(sys.argv[1], "r") as parameterfile:
             config = yaml.load(parameterfile, yaml.Loader)
 
         rospy.init_node("decision")
         publishing_rate = (float(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else DEFAULT_RATE)
-        rospy.loginfo(f"Publishing rate: {publishing_rate} Hz")
+        rospy.loginfo("Publishing rate: {} Hz".format(publishing_rate))
         node = DecisionMaker(config, publishing_rate)
         node.activate_camera(forward=True, forward_left=False, forward_right=False, backward=False)
 
