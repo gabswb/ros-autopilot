@@ -27,11 +27,10 @@ class DistanceExtractor (object):
 		self.config = config
 		self.use_map = use_map
 		self.visualize_lidar = visualize_lidar
-		self.map_frame = self.config["map"]["world-frame"]
-		self.reference_frame = self.config["map"]["reference-frame"]
+		self.reference_frame = config["map"]["reference-frame"]
 
 		if self.use_map:
-			self.map_handler = map_handler.MapHandler(self.config)
+			self.map_handler = map_handler.MapHandler(self.config["map"]["road-network-path"])
 		else:
 			self.sensor_to_image = np.asarray([[1124.66943359375, 0.0, 505.781982421875],
 											   [0.0, 1124.6165771484375, 387.8110046386719],
@@ -49,17 +48,11 @@ class DistanceExtractor (object):
 		self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
-		self.transforms = {}
-
 		rospy.loginfo("DistanceExtractor initialized")
 
 
 	def get_transform(self, source_frame, target_frame):
 		"""Update the lidar-to-camera transform matrix from the tf topic"""
-
-		if (source_frame, target_frame) in self.transforms:
-			return self.transforms[(source_frame, target_frame)]
-		
 		try:
 			# It’s lookup_transform(target_frame, source_frame, …) !!!
 			transform = self.tf_buffer.lookup_transform(target_frame, source_frame, rospy.Time(0))
@@ -74,12 +67,10 @@ class DistanceExtractor (object):
 		translation_vector = np.asarray((translation_message.x, translation_message.y, translation_message.z)).reshape(3, 1)
 		
 		# Build the complete transform matrix
-		transform_matrix = np.concatenate((
+		return np.concatenate((
 			np.concatenate((rotation_matrix, translation_vector), axis=1),
 			np.asarray((0, 0, 0, 1)).reshape((1, 4))
-			), axis=0)
-		self.transforms[(source_frame, target_frame)] = transform_matrix
-		return transform_matrix
+		), axis=0)
 	
 
 	def image_preprocessing(self, data):
@@ -194,6 +185,13 @@ class DistanceExtractor (object):
 			distance = distances[index]
 			position = relevant_points_reference[:, index]
 
+			if self.use_map:
+				# filter out object that are not on the road
+				reference_to_map = self.get_transform(self.reference_frame, self.config["map"]["world-frame"])
+				position_map = reference_to_map @ position.T
+				if not self.map_handler.is_on_road((position_map[0], position_map[1])):
+					continue
+
 			obj = Object()
 			obj.bbox = bbox
 			obj.distance = distance
@@ -205,6 +203,7 @@ class DistanceExtractor (object):
 			object_list.append(obj)
 
 		return object_list
+	
 
 	def get_color(self, distances):
 		# Generate the color gradient from point distances

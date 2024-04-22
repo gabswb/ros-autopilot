@@ -34,7 +34,6 @@ class ObjectDetector(object):
         rospy.loginfo("Object detector ready")	
 
     def create_bbox_msg(self, boxes, class_id, instance_id = 0):
-        """Create a ObjectBoundingBox message"""
         msg_bbox = ObjectBoundingBox()
         msg_bbox.x = boxes[0]
         msg_bbox.y = boxes[1]

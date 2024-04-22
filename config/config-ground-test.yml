@@ -10,7 +10,6 @@ topic:
   forward-right-lidar-viz: /perception/viz/forward_right_lidar
   forward-left-lidar-viz: /perception/viz/forward_left_lidar
   backward-lidar-viz: /perception/viz/backward_lidar
-  camera-activation: /decision/camera_activation
 
   # car topic
   forward-camera: /zoe2/sensors/cameras/front_top/image_raw

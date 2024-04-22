@@ -11,8 +11,6 @@ topic:
   forward-right-lidar-viz: /perception/viz/forward_right_lidar
   forward-left-lidar-viz: /perception/viz/forward_left_lidar
   backward-lidar-viz: /perception/viz/backward_lidar
-  camera-activation: /decision/camera_activation
-  decision-info: /decision/decision
   
   # car topic
   forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
