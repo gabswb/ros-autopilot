@@ -119,7 +119,7 @@ class MapPlotter(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage : {} <config-file>".format(sys.argv[0]))
+        print("Usage : {} <config-file>".format(sys.argv[0]))   
     else:
         with open(sys.argv[1], "r") as config_file:
             config = yaml.load(config_file, yaml.Loader)
