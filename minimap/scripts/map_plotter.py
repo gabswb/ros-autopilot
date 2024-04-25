@@ -7,7 +7,6 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import Polygon
 
 import rospy
-import tf2_ros
 import transforms3d.quaternions as quaternions
 
 from perception.msg import ObjectList
