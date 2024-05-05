@@ -15,6 +15,7 @@ topic:
   decision-info: /decision/decision
   
   # car topic
+  car-map-transformations: /car_map_transformations
   forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
   forward-camera-info: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]      
   forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  

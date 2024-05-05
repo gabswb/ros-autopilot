@@ -13,6 +13,7 @@ topic:
   camera-activation: /decision/camera_activation
 
   # car topic
+  car-map-transformations: /car_map_transformations
   forward-camera: /zoe2/sensors/cameras/front_top/image_raw
   forward-camera-info: /fzoe2/sensors/cameras/front_top/camera_info             # Front camera info topic             :                       [CameraInfo]      
   # forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  

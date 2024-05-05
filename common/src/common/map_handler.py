@@ -6,7 +6,8 @@ from enum import Enum
 import matplotlib.pyplot as plt
 
 import rospy
-import tf
+from std_msgs.msg import Float64MultiArray
+# import tf
 import transforms3d.quaternions as quaternions
 from common.road import Road
 
@@ -24,7 +25,6 @@ class MapHandler(object):
 
 		# self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
 		# self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
-		self.tf_listener = tf.TransformListener()
 
 		with open(self.config["map"]["road-network-path"], 'r') as f:
 			self.road_network = json.load(f)
@@ -93,37 +93,42 @@ class MapHandler(object):
 					return road
 		return None
 
-	def get_transform(self, source_frame, target_frame):
-		"""Update the lidar-to-camera transform matrix from the tf topic"""
-		try:
-			# It’s lookup_transform(target_frame, source_frame, …) !!!
-			now = rospy.Time.now() 
-			self.tf_listener.waitForTransform(target_frame, source_frame, now, rospy.Duration(4.0))
-			(translation, rotation) = self.tf_listener.lookupTransform(target_frame, source_frame, now)
-		except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-			rospy.logerr('Transform not found')
-			return
+	# def get_transform(self, source_frame, target_frame):
+	# 	"""Update the lidar-to-camera transform matrix from the tf topic"""
+	# 	try:
+	# 		# It’s lookup_transform(target_frame, source_frame, …) !!!
+	# 		now = rospy.Time.now() 
+	# 		self.tf_listener.waitForTransform(target_frame, source_frame, now, rospy.Duration(4.0))
+	# 		(translation, rotation) = self.tf_listener.lookupTransform(target_frame, source_frame, now)
+	# 	except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+	# 		rospy.logerr('Transform not found')
+	# 		return
 
-		# Build the matrix elements
-		rotation_message = rotation
-		rotation_quaternion = np.asarray((rotation_message[3], rotation_message[0], rotation_message[1], rotation_message[2]))
-		rotation_matrix = quaternions.quat2mat(rotation_quaternion)
-		translation_message = translation
-		translation_vector = np.asarray((translation_message[0], translation_message[1], translation_message[2])).reshape(3, 1)
+	# 	# Build the matrix elements
+	# 	rotation_message = rotation
+	# 	rotation_quaternion = np.asarray((rotation_message[3], rotation_message[0], rotation_message[1], rotation_message[2]))
+	# 	rotation_matrix = quaternions.quat2mat(rotation_quaternion)
+	# 	translation_message = translation
+	# 	translation_vector = np.asarray((translation_message[0], translation_message[1], translation_message[2])).reshape(3, 1)
 
-		# Build the complete transform matrix
-		return np.concatenate((
-			np.concatenate((rotation_matrix, translation_vector), axis=1),
-			np.asarray((0, 0, 0, 1)).reshape((1, 4))
-		), axis=0)
+	# 	# Build the complete transform matrix
+	# 	return np.concatenate((
+	# 		np.concatenate((rotation_matrix, translation_vector), axis=1),
+	# 		np.asarray((0, 0, 0, 1)).reshape((1, 4))
+	# 	), axis=0)
+	
+	def get_car_map_transformation_matrix(self, source_frame, target_frame):
+		"""Update the lidar-to-camera transform matrix from the transformation topic"""
+
+		return rospy.wait_for_message(self.config["topic"]["car-map-transformations"], Float64MultiArray)
 
 	def get_world_position(self, car_baslink=np.array([0, 0, 0])):
-		baslink_to_map = self.get_transform("camera_forward_optical_frame", self.config["map"]["world-frame"])
+		baslink_to_map = self.get_car_map_transformation_matrix()
 		position = baslink_to_map @ np.concatenate((car_baslink, np.array([1]))).T
 		return (position / position[3])[:3]
 
 	def get_car_world_position(self, world_position):
-		map_to_baslink = self.get_transform(self.config["map"]["world-frame"], "camera_forward_optical_frame")
+		map_to_baslink = np.linalg.inv(self.get_car_map_transformation_matrix())
 		position = map_to_baslink @ np.concatenate((world_position, np.array([1]))).T
 		return (position / position[3])[:3]
 
