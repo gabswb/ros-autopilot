@@ -1,0 +1,54 @@
+
+topic:
+  # autopilot topic
+  object-info: /perception/objects            
+  object-bbox: /object_bounding_box
+  forward-bbox-viz: /perception/viz/forward_bounding_box
+  forward-right-bbox-viz: /perception/viz/forward_right_bounding_box
+  forward-left-bbox-viz: /perception/viz/forward_left_bounding_box
+  backward-bbox-viz: /perception/viz/backward_bounding_box
+  forward-lidar-viz: /perception/viz/forward_lidar
+  forward-right-lidar-viz: /perception/viz/forward_right_lidar
+  forward-left-lidar-viz: /perception/viz/forward_left_lidar
+  backward-lidar-viz: /perception/viz/backward_lidar
+  camera-activation: /decision/camera_activation
+  decision-info: /decision/decision
+  
+  # car topic
+  car-map-transformations: /car_map_transformations
+  forward-camera: /forwardCamera/image_raw                    # Front camera topic                  :                       [Image]           
+  forward-camera-info: /forwardCamera/camera_info             # Front camera info topic             :                       [CameraInfo]      
+  forward-left-camera: /forwardLeftCamera/image_raw                    # Front left camera topic                  :                       [Image]  
+  forward-left-camera-info: /forwardLeftCamera/camera_info             # Front left camera info topic             :                       [CameraInfo]  
+  forward-right-camera: /forwardRightCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  forward-right-camera-info: /forwardRightCamera/camera_info             # Front right camera info topic             :                       [CameraInfo]
+  backward-camera: /backwardCamera/image_raw                    # Front right camera topic                  :                       [Image]     
+  backward-camera-info: /backwardCamera/camera_info  
+  velocity: /ZOE2UTBM/car/velocity                   # Vehicle velocity data topic         :                       [TwistStamped]                       ⟶ transformtrack
+  pointcloud: /lidar                                 # Lidar pointcloud topic              :                       [PointCloud2]                        ⟶ trafficsigns
+  control-refs-topic: /zoe2/control/refs 
+  speed: /ZOE2UTBM/control/speed                     # Vehicle speed control topic         : control            ⟶ [Float32]
+  speed-cap: /ZOE2UTBM/control/max_speed             # Vehicle speed cap topic             : control            ⟶ [Float32]
+  steering-angle: /ZOE2UTBM/control/steering_angle   # Vehicle steering topic              : control            ⟶ [Float32]
+  forward-camera-width: 1028
+  forward-camera-height: 771
+
+map:
+  lane-width: 3.5                                         # Width of the lane in meters
+  world-frame: map                                         # Fixed frame of reference
+  car-frame: base_link                                    # Reference frame for the vehicle. (X, Y) is the ground / road plane, Z points upward, the origin in right underneath the vehicle
+  reference-frame: camera_forward_optical_frame
+  forward-camera-frame: camera_forward_optical_frame
+  road-network-path: src/campus_road_network.json
+
+service:
+  toogle-navigation: /ZOE2UTBM/control/toggle_navigation 
+
+model:
+  detection-model-class-names-path: src/models/yolov8/classes.names
+  yolov8n-path: src/models/yolov8/yolov8n.pt
+  yolov8l-path: src/models/yolov8/yolov8l.pt
+
+feature:
+  navigation: True
+  controle-type: speed_and_steering_angle
