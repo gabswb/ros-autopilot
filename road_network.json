@@ -19184,17 +19184,7 @@
         "ty": -0.0125477938,
         "width": 3.5
       }
-    ],
-    "previous": [
-      "462b89dd-038b-494d-9645-ded4692aea81",
-      "76c1b205-b4e5-4af7-be6d-4298031cc950"
-    ],
-    "next": [
-      "5afb7765-9bf4-4eff-8d7b-51ca3139f1f9",
-      "580ec1bf-8af4-41a4-941a-2f26debc23b5",
-      "711847cf-e3ac-4008-abfa-5a20aaebdf83"
-    ],
-    "outer": "a26e2f68-6588-4a65-89eb-2c6d2f3e5c36"
+    ]
   },
   {
     "guid": "84d8de5e-efc1-430c-be4f-20267ef43d50",
