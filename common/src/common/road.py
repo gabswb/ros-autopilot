@@ -35,24 +35,24 @@ class Road():
         next_segment = first_segment
         previous_segment = first_segment
 
-        while len(previous_segment["previous"]) == 1:
+        while "previous" in previous_segment and len(previous_segment["previous"]) == 1:
             segment_road = self.map_handler.is_segment_assigned(previous_segment["previous"][0])
             if segment_road is False:
                 previous_segment_guid = previous_segment["previous"][0]
                 previous_segment = self.map_handler.get_segment(previous_segment_guid)
-                if len(previous_segment["next"]) == 1:
+                if "next" in previous_segment and len(previous_segment["next"]) == 1:
                     self.add_segment_to_road(previous_segment, "previous")
                 else:
                     break
             else:
                 break
 
-        while len(next_segment["next"]) == 1:
+        while "next" in next_segment and len(next_segment["next"]) == 1:
             segment_road = self.map_handler.is_segment_assigned(next_segment["next"][0])
             if segment_road is False:
                 next_segment_guid = next_segment["next"][0]
                 next_segment = self.map_handler.get_segment(next_segment_guid)
-                if len(next_segment["previous"]) > 1:
+                if "previous" in next_segment and len(next_segment["previous"]) > 1:
                     new_road = Road(self.map_handler, next_segment)
                     self.forwardRoad = new_road
                     self.forwardRoad.previous_road_list.append(self)
@@ -65,7 +65,7 @@ class Road():
                 self.forwardRoad.previous_road_list.append(self)
                 break
 
-        if len(next_segment["next"]) >= 2:
+        if "next" in next_segment and "previous" in next_segment and len(next_segment["next"]) >= 2:
             last_index = int(len(next_segment["geometry"]) - 1)
             origin_point = [next_segment["geometry"][last_index]['px'],
                             next_segment["geometry"][last_index]['py']]
@@ -86,7 +86,7 @@ class Road():
 
                 middle_index = int(len(intersection_segment["geometry"]) / 2)
                 point = [intersection_segment["geometry"][middle_index]['px'],
-                         intersection_segment["geometry"][middle_index]['py']]
+                        intersection_segment["geometry"][middle_index]['py']]
 
                 point_list.append(point)
                 angle = get_angle(normal_point, origin_point, point)
