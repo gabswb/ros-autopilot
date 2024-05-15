@@ -8,7 +8,7 @@ import numpy as np
 np.float = np.float64 # fix for https://github.com/eric-wieser/ros_numpy/issues/37
 
 #import tf2_ros
-#import tf
+import tf
 import ros_numpy
 from cv_bridge import CvBridge
 import transforms3d.quaternions as quaternions
@@ -38,16 +38,6 @@ class DistanceExtractor (object):
 											   [0.0, 0.0, 1.0]]).reshape((3, 3))
 			self.distortion_parameter = 0.8803200125694275
 
-		# Initialize tranform matrix
-		self.lidar_to_camera = np.array([[0.99992, 0.0047016, 0.011769, -0.040613],
-										[0.011497, 0.054171, -0.99847, -0.49754],
-										[-0.0053319, 0.99852, 0.054113, -0.96297],
-										[0, 0, 0, 1]])
-		self.lidar_to_reference = np.array([[0.99992, 0.0047016, 0.011769, -0.040613],
-										[0.011497, 0.054171, -0.99847, -0.49754],
-										[-0.0053319, 0.99852, 0.054113, -0.96297],
-										[0, 0, 0, 1]])
-
 		# Initialize the topic subscribers
 		self.camerainfo_subscriber = rospy.Subscriber(camera_info_topic, CameraInfo, self.callback_camerainfo)
 
@@ -57,39 +47,39 @@ class DistanceExtractor (object):
 		
 		# Initialize the transformation listener
 		#self.tf_buffer = tf2_ros.Buffer(rospy.Duration(120))
-		#self.tf_listener = tf.TransformListener()
+		self.tf_listener = tf.TransformListener()
 
 		self.transforms = {}
 
 		rospy.loginfo("DistanceExtractor initialized")
 
 
-	# def get_transform(self, source_frame, target_frame):
-	# 	"""Update the lidar-to-camera transform matrix from the tf topic"""
+	def get_transform(self, source_frame, target_frame):
+		"""Update the lidar-to-camera transform matrix from the tf topic"""
 
-	# 	if (source_frame, target_frame) in self.transforms:
-	# 		return self.transforms[(source_frame, target_frame)]
+		if (source_frame, target_frame) in self.transforms:
+			return self.transforms[(source_frame, target_frame)]
 		
-	# 	try:
-	# 		# It’s lookup_transform(target_frame, source_frame, …) !!!
-	# 		(translation, rotation) = self.tf_listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
-	# 	except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-	# 		return
+		try:
+			# It’s lookup_transform(target_frame, source_frame, …) !!!
+			(translation, rotation) = self.tf_listener.lookupTransform(target_frame, source_frame, rospy.Time(0))
+		except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+			return
 
-	# 	# Build the matrix elements
-	# 	rotation_message = rotation
-	# 	rotation_quaternion = np.asarray((rotation_message[3], rotation_message[0], rotation_message[1], rotation_message[2]))
-	# 	rotation_matrix = quaternions.quat2mat(rotation_quaternion)
-	# 	translation_message = translation
-	# 	translation_vector = np.asarray((translation_message[0], translation_message[1], translation_message[2])).reshape(3, 1)
+		# Build the matrix elements
+		rotation_message = rotation
+		rotation_quaternion = np.asarray((rotation_message[3], rotation_message[0], rotation_message[1], rotation_message[2]))
+		rotation_matrix = quaternions.quat2mat(rotation_quaternion)
+		translation_message = translation
+		translation_vector = np.asarray((translation_message[0], translation_message[1], translation_message[2])).reshape(3, 1)
 		
-	# 	# Build the complete transform matrix
-	# 	transform_matrix = np.concatenate((
-	# 		np.concatenate((rotation_matrix, translation_vector), axis=1),
-	# 		np.asarray((0, 0, 0, 1)).reshape((1, 4))
-	# 		), axis=0)
-	# 	self.transforms[(source_frame, target_frame)] = transform_matrix
-	# 	return transform_matrix
+		# Build the complete transform matrix
+		transform_matrix = np.concatenate((
+			np.concatenate((rotation_matrix, translation_vector), axis=1),
+			np.asarray((0, 0, 0, 1)).reshape((1, 4))
+			), axis=0)
+		self.transforms[(source_frame, target_frame)] = transform_matrix
+		return transform_matrix
 	
 
 	def image_preprocessing(self, data):
@@ -145,9 +135,11 @@ class DistanceExtractor (object):
 		lidar_frame, pointcloud = self.pointcloud_preprocessing(pointcloud_data)
 
 		sensor_to_image = self.sensor_to_image
+		lidar_to_camera = self.get_transform(lidar_frame, camera_frame)
+		lidar_to_reference = self.get_transform(lidar_frame, self.reference_frame)
 		
-		pointcloud_camera = self.lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
-		pointcloud_reference = self.lidar_to_reference @ pointcloud # (4,N) = (4,4) @ (4,N)
+		pointcloud_camera = lidar_to_camera @ pointcloud # (4,N) = (4,4) @ (4,N)
+		pointcloud_reference = lidar_to_reference @ pointcloud # (4,N) = (4,4) @ (4,N)
 
 		# Filter out points that are behind the camera, otherwise the following calculations overlay them on the image with inverted coordinates
 		valid_points = (pointcloud_camera[2, :] >= 0) # (N,)
