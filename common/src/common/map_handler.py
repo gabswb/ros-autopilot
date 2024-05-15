@@ -120,7 +120,7 @@ class MapHandler(object):
 	def get_car_map_transformation_matrix(self, source_frame, target_frame):
 		"""Update the lidar-to-camera transform matrix from the transformation topic"""
 
-		return np.array(rospy.wait_for_message(self.config["topic"]["car-map-transformations"], Float64MultiArray))
+		return rospy.wait_for_message(self.config["topic"]["car-map-transformations"], Float64MultiArray)
 
 	def get_world_position(self, car_baslink=np.array([0, 0, 0])):
 		baslink_to_map = self.get_car_map_transformation_matrix()
