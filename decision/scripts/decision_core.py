@@ -26,7 +26,7 @@ LEFT = -1
 RIGHT = 1
 CAR_LENGHT = 3
 CAR_WIDTH = 2
-TARGET_TO_FOLLOW_DISTANCE = 2
+TARGET_TO_FOLLOW_DISTANCE = 3
 from scipy import interpolate 
 
 class DecisionMaker(object):
@@ -67,6 +67,7 @@ class DecisionMaker(object):
         # Target states
         self.last_distance_to_target = None
         self.last_distance_to_target_time = None
+        self.car_current_target_point = None
         self.current_target_point = None
         self.current_target_speed = None
         self.target_reached_count = 0
@@ -143,6 +144,8 @@ class DecisionMaker(object):
         return object.left_blink and object.right_blink
 
     def init_overtaking(self, preceding_object):
+        # hardcoded for specific scenario
+
         self.overtaking = True
         self.overtaken_car = preceding_object
         self.overtaking_end_step = self.target_reached_count + 3
@@ -196,7 +199,7 @@ class DecisionMaker(object):
             self.next_target()
 
         # get current and target position
-        target_x, target_y, wished_speed = self.current_target_point
+        target_x, target_y, target_z = self.current_target_point
         speed = self.current_target_speed
         x, y, z = current_position
         distance_to_target = np.linalg.norm([x - target_x, y - target_y])
@@ -217,20 +220,29 @@ class DecisionMaker(object):
         if distance_to_target < 1:
             self.next_target()
 
-        # smoothen the target
-        if len(self.targets) > 3:
-            target_x, target_y, target_z = self.current_target_point
-            # path to interpolate with current target and next 3 targets (only x and y coordinates)
-            path_to_interpolate = np.array([[target_x, target_y], self.targets[0][0:2], self.targets[1][0:2], self.targets[2][0:2], self.targets[3][0:2]])
-            print(path_to_interpolate.shape)
-
         # get target position in car referential
         target = self.map_handler.get_car_world_position(self.current_target_point)
 
         # if target is behind the car, go to the next one
         if target[2] < 0:
             self.next_target()
-            
+        else:
+            # smoothen the target
+            if len(self.targets) > 3:
+                target_x, target_y, target_z = self.current_target_point
+
+                # path to interpolate with current target and next 3 targets
+                first_next_target = self.map_handler.get_car_world_position(self.targets[0][:3])
+                second_next_target = self.map_handler.get_car_world_position(self.targets[1][:3])
+                third_next_target = self.map_handler.get_car_world_position(self.targets[2][:3])
+                path_to_interpolate = np.array([[0, 0, 0], target, first_next_target, second_next_target, third_next_target])
+
+                interolate_function = interpolate.interp1d(path_to_interpolate[:,2], path_to_interpolate[:,0])
+                interpolated_target = interolate_function(TARGET_TO_FOLLOW_DISTANCE)
+
+                target = [interpolated_target.item(), target[1] ,TARGET_TO_FOLLOW_DISTANCE]
+
+        self.car_current_target_point = self.map_handler.get_world_position(target)
         return target, speed
 
     def activate_camera(self, forward=True, forward_left=False, forward_right=False, backward=True):
@@ -243,7 +255,7 @@ class DecisionMaker(object):
 
     def publish_decision_info(self, roads_id, is_road_available):
         decision_info = DecisionInfo()
-        decision_info.target1 = list(self.current_target_point)
+        decision_info.target1 = list(self.car_current_target_point)
         decision_info.target2 = list(self.targets[0][0:3]) if len(self.targets) > 1 else []
         decision_info.target3 = list(self.targets[1][0:3]) if len(self.targets) > 2 else []
         decision_info.target4 = list(self.targets[2][0:3]) if len(self.targets) > 3 else []
