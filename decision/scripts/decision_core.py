@@ -3,6 +3,7 @@ import sys
 import yaml
 import numpy as np
 import math
+import scipy
 
 import rospy
 from geometry_msgs.msg import TwistStamped
@@ -25,6 +26,8 @@ LEFT = -1
 RIGHT = 1
 CAR_LENGHT = 3
 CAR_WIDTH = 2
+TARGET_TO_FOLLOW_DISTANCE = 2
+from scipy import interpolate 
 
 class DecisionMaker(object):
     def __init__(self, config, publishing_rate):
@@ -193,7 +196,7 @@ class DecisionMaker(object):
             self.next_target()
 
         # get current and target position
-        target_x, target_y, target_z = self.current_target_point
+        target_x, target_y, wished_speed = self.current_target_point
         speed = self.current_target_speed
         x, y, z = current_position
         distance_to_target = np.linalg.norm([x - target_x, y - target_y])
@@ -206,13 +209,20 @@ class DecisionMaker(object):
         elif rospy.get_time() - self.last_distance_to_target_time > 0.5:
             if distance_to_target > self.last_distance_to_target:
                 rospy.loginfo("INFO: going away from target")
-                self.next_target()
+                # self.next_target()
             self.last_distance_to_target = distance_to_target
             self.last_distance_to_target_time = rospy.get_time()
 
         # if we reach the target point, go to the next one
         if distance_to_target < 1:
             self.next_target()
+
+        # smoothen the target
+        if len(self.targets) > 3:
+            target_x, target_y, target_z = self.current_target_point
+            # path to interpolate with current target and next 3 targets (only x and y coordinates)
+            path_to_interpolate = np.array([[target_x, target_y], self.targets[0][0:2], self.targets[1][0:2], self.targets[2][0:2], self.targets[3][0:2]])
+            print(path_to_interpolate.shape)
 
         # get target position in car referential
         target = self.map_handler.get_car_world_position(self.current_target_point)
