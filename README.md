@@ -1,11 +1,5 @@
 # ros-autopilot
 This project provides a set of ROS packages for perception and decision-making for autonomous driving in a dynamic environment. This project assumes that a structural map describing the static environment such as roads is available. In our test case, this map is described in the file `road_network.json`.
-## Demonstration video
-
-
-https://github.com/gabswb/ros-autopilot/assets/12534925/cdc4bd93-8e9e-4000-872c-367b470247a8
-
-
 
 ## Packages usage
 ### perception
